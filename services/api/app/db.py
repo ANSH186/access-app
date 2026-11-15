@@ -4,7 +4,10 @@ from __future__ import annotations
 import asyncio
 import logging
 
-import asyncpg
+try:
+    import asyncpg
+except ImportError:
+    asyncpg = None  # type: ignore
 
 from .errors import AppError
 
@@ -20,7 +23,7 @@ class Database:
     async def pool(self) -> asyncpg.Pool:
         if self._pool is not None:
             return self._pool
-        if not self.dsn:
+        if not self.dsn or asyncpg is None:
             raise AppError(503, "map_unavailable", "The map is not available right now. Please try again later.")
         async with self._lock:
             if self._pool is None:
