@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "AccessAble",
+    "slug": "accessable-ai",
+    "scheme": "accessable",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0A0A0A",
+    "ios": {
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSCameraUsageDescription": "AccessAble uses the camera to read signs, describe scenes and scan location checkpoints.",
+        "NSMicrophoneUsageDescription": "AccessAble uses the microphone for voice commands."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0A0A0A",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "permissions": ["android.permission.CAMERA", "android.permission.RECORD_AUDIO"],
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-audio",
+        { "microphonePermission": "AccessAble uses the microphone for voice commands." }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "AccessAble uses the camera to read signs, describe scenes and scan location checkpoints.",
+          "recordAudioAndroid": false
+        }
+      ],
+      "expo-asset"
+    ]
+  }
+}
