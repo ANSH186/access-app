@@ -190,6 +190,32 @@ class GeminiClient:
                 out.append({"model": model, "status": 0, "error": type(exc).__name__})
         return out
 
+    async def list_models(self) -> list[str]:
+        """List model ids visible to this key (diagnostics only)."""
+        if not self.api_key:
+            return []
+        try:
+            async with httpx.AsyncClient(timeout=20) as client:
+                resp = await client.get(
+                    f"{self.base_url}/models",
+                    headers={"x-goog-api-key": self.api_key},
+                    params={"pageSize": 100},
+                )
+            if resp.status_code >= 400:
+                return []
+            data = resp.json()
+            out = []
+            for m in data.get("models") or []:
+                name = str(m.get("name") or "")
+                if name.startswith("models/"):
+                    name = name[7:]
+                methods = m.get("supportedGenerationMethods") or []
+                if name and (not methods or "generateContent" in methods):
+                    out.append(name)
+            return out
+        except (httpx.HTTPError, ValueError):
+            return []
+
 
 def _extract_json(resp: httpx.Response) -> dict[str, Any]:
     try:

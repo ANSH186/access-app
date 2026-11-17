@@ -58,5 +58,6 @@ async def diagnostics_ai(
     return {
         "configured": bool(gemini.api_key),
         "models": gemini.models,
+        "available_models": await gemini.list_models(),
         "probe": await gemini.probe(),
     }
