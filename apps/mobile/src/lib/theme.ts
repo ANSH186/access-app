@@ -13,11 +13,11 @@ export const colors = {
 };
 
 export const sizes = {
-  minTarget: 64,
-  sosTarget: 76,
+  minTarget: 72,
+  sosTarget: 84,
   radius: 16,
   pad: 16,
-  body: 20,
-  large: 26,
-  huge: 34,
+  body: 21,
+  large: 27,
+  huge: 36,
 };

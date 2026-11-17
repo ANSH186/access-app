@@ -5,6 +5,8 @@ import { CallButtons } from '../components/CallButtons';
 import { BigButton, Body, Heading, LiveText, Screen } from '../components/ui';
 import { ageText, locationText } from '../lib/format';
 import { haptic } from '../lib/haptics';
+import { accuracyText, ensureLocationPermission, getMyLocation } from '../lib/location';
+import { loadMap, nearestNode } from '../lib/map';
 import { speak } from '../lib/speech';
 import { saveLastAlertId } from '../lib/storage';
 import { endSosAttempt, sendSos, startSosAttempt } from '../lib/sos';
@@ -22,10 +24,11 @@ const TYPES: { value: string; label: string }[] = [
 const PROMPT = 'Send an emergency alert to campus security? Double-tap Send SOS to confirm.';
 
 export default function SosConfirm() {
-  const { profile, location, refreshActiveAlert } = useApp();
+  const { profile, location, setLocation, refreshActiveAlert } = useApp();
   const [phase, setPhase] = useState<'confirm' | 'sending' | 'failed'>('confirm');
   const [type, setType] = useState<string | null>(null);
   const [err, setErr] = useState('');
+  const [locating, setLocating] = useState(false);
   const attemptStarted = useRef(false);
   const repeatTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -48,6 +51,47 @@ export default function SosConfirm() {
   }, [phase]);
 
   const share = profile?.share_location_in_sos !== false;
+
+  async function startGps() {
+    if (locating) return;
+    setLocating(true);
+    speak('Checking your GPS location.');
+    try {
+      const perm = await ensureLocationPermission();
+      if (!perm.granted) {
+        speak('Location permission was not granted. You can still send the alert without a precise location.');
+        return;
+      }
+      const coords = await getMyLocation();
+      if (!coords) {
+        speak('I could not get a GPS fix. You can still send the alert without a precise location.');
+        return;
+      }
+      const m = await loadMap();
+      const hit = nearestNode(m, coords.latitude, coords.longitude, { searchableOnly: true, maxDistanceM: 700 });
+      if (!hit) {
+        speak(`I could not match you to a mapped place. GPS is ${accuracyText(coords.accuracy)}.`);
+        return;
+      }
+      setLocation({
+        node_id: hit.node.id,
+        label: `near ${hit.node.label}`,
+        floor_level: hit.node.floor_level,
+        floor_name: hit.node.floor_name || 'NIE North Campus',
+        source: 'gps',
+        observed_at: new Date().toISOString(),
+        lat: coords.latitude,
+        lng: coords.longitude,
+        accuracy_m: coords.accuracy,
+      });
+      haptic.success();
+      speak(`Location updated: about ${Math.round(hit.distance)} metres from ${hit.node.label}. GPS is ${accuracyText(coords.accuracy)}.`);
+    } catch {
+      speak('I could not check your location. You can still send the alert.');
+    } finally {
+      setLocating(false);
+    }
+  }
 
   async function send() {
     if (phase === 'sending') return;
@@ -113,6 +157,14 @@ export default function SosConfirm() {
             ? `Location that will be shared: ${locationText(location)}, confirmed ${ageText(location.observed_at)}.`
             : 'No confirmed location to share. Campus staff will not know where you are.'}
       </Body>
+      {share && (
+        <BigButton
+          label={locating ? 'Checking GPS…' : 'Use my current GPS location'}
+          hint="Updates the location that will be sent with your alert"
+          disabled={locating || phase === 'sending'}
+          onPress={startGps}
+        />
+      )}
 
       <Body>Emergency type (optional):</Body>
       <View style={{ gap: 10 }}>

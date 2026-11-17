@@ -71,6 +71,25 @@ export default function AuthScreen() {
     }
   }
 
+  async function demoSignIn() {
+    if (busy) return;
+    setBusy(true);
+    setEmail('student@accessable.demo');
+    setPassword('Demo@12345');
+    say('Signing in to the demo student account.');
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: 'student@accessable.demo',
+        password: 'Demo@12345',
+      });
+      if (error) say(`Demo sign in failed. ${error.message}`);
+    } catch (err) {
+      say(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Screen>
@@ -126,12 +145,29 @@ export default function AuthScreen() {
           onPress={submit}
         />
         <BigButton
+          label="Sign in as demo student"
+          hint="Uses the test student account. For trying the app without creating an account."
+          disabled={busy}
+          onPress={demoSignIn}
+        />
+        <BigButton
           label={mode === 'in' ? 'I need an account' : 'I already have an account'}
           variant="ghost"
           onPress={() => {
             setMsg('');
             setMode(mode === 'in' ? 'up' : 'in');
           }}
+        />
+        <BigButton
+          label="Read this screen"
+          variant="ghost"
+          onPress={() =>
+            speak(
+              mode === 'in'
+                ? 'Sign in with your email and password. You can also sign in as a demo student. Double tap a field to type.'
+                : 'Create an account with your name, email and password. You can add an emergency contact now or later in settings.',
+            )
+          }
         />
       </Screen>
     </KeyboardAvoidingView>

@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { api, errorToSpeech } from '../lib/api';
 import { haptic } from '../lib/haptics';
+import { loadMap, planRoute as planLocalRoute } from '../lib/map';
 import { clearLastInstruction, speak } from '../lib/speech';
 import { supabase } from '../lib/supabase';
 import type { ConfirmedLocation, RoutePlan, RouteStep } from '../lib/types';
@@ -17,6 +18,8 @@ type NavState = {
   /** Explanation + warnings, shown on screen above the first step of a (re)planned route. */
   notice: string | null;
   message: string | null;
+  /** True when the route came from the offline bundle instead of the API. */
+  savedMap: boolean;
 };
 
 type NavApi = NavState & {
@@ -27,12 +30,14 @@ type NavApi = NavState & {
   prev: () => void;
   repeat: () => void;
   stop: (silent?: boolean) => void;
+  /** User says they have arrived; skip straight to the arrival message. */
+  finish: () => void;
   /** Called after a checkpoint is confirmed. Returns extra text to speak (or null). */
   onCheckpoint: (loc: ConfirmedLocation) => Promise<string | null>;
   currentStep: RouteStep | null;
 };
 
-const initial: NavState = { dest: null, plan: null, stepIndex: 0, status: 'idle', notice: null, message: null };
+const initial: NavState = { dest: null, plan: null, stepIndex: 0, status: 'idle', notice: null, message: null, savedMap: false };
 const Ctx = createContext<NavApi | null>(null);
 
 export function useNav(): NavApi {
@@ -94,16 +99,54 @@ export function NavProvider({ children }: { children: React.ReactNode }) {
       planningRef.current = true;
       commit({ status: 'planning', message: null });
       try {
-        const plan = await api.planRoute({
-          from_node_id: fromNodeId,
-          to_node_id: dest.node_id,
-          avoid_stairs: avoidRef.current,
-        });
+        let plan: RoutePlan;
+        let saved = false;
+        let localMap: Awaited<ReturnType<typeof loadMap>> | null = null;
+        try {
+          const m = await loadMap();
+          localMap = m;
+          plan = planLocalRoute(m, fromNodeId, dest.node_id, avoidRef.current);
+          saved = m.source !== 'live';
+          if (!plan.found) {
+            // The server may know about a connection or a live block that the
+            // cached map does not. Ask it only when the local graph has no path.
+            plan = await api.planRoute({
+              from_node_id: fromNodeId,
+              to_node_id: dest.node_id,
+              avoid_stairs: avoidRef.current,
+            });
+            saved = false;
+          }
+        } catch (localErr) {
+          plan = await api.planRoute({
+            from_node_id: fromNodeId,
+            to_node_id: dest.node_id,
+            avoid_stairs: avoidRef.current,
+          });
+          saved = false;
+          if (!plan.found) {
+            plan.explanation = `${plan.explanation ?? ''} ${errorToSpeech(localErr)}`.trim();
+          }
+        }
+        // Enrich steps with GPS coordinates from the local map so the app can
+        // auto-advance outdoors.
+        if (localMap) {
+          plan.steps = (plan.steps ?? []).map((s) => {
+            const n = localMap!.nodes[s.to_node_id];
+            return n ? { ...s, to_label: n.label, to_lat: n.lat ?? undefined, to_lng: n.lng ?? undefined } : s;
+          });
+        }
+        if (saved) {
+          plan.warnings = [
+            ...(plan.warnings ?? []),
+            'Using the saved campus map. Live obstacles may not appear.',
+          ];
+        }
         if (!plan.found) {
           const msg =
             plan.explanation ||
             'I could not find a route right now. Try a different destination or scan a checkpoint.';
-          commit({ plan: null, status: 'noroute', message: msg, notice: null, stepIndex: 0 });
+          commit({ plan: null, status: 'noroute', message: msg, notice: null, stepIndex: 0, savedMap: saved });
           if (!silent) speak(msg);
           return msg;
         }
@@ -112,7 +155,7 @@ export function NavProvider({ children }: { children: React.ReactNode }) {
           (x): x is string => !!x && x.trim().length > 0,
         );
         if (steps.length === 0) {
-          commit({ plan, stepIndex: 0 });
+          commit({ plan, stepIndex: 0, savedMap: saved });
           return arrive(plan, dest.label, !silent);
         }
         commit({
@@ -121,6 +164,7 @@ export function NavProvider({ children }: { children: React.ReactNode }) {
           status: 'active',
           notice: noticeParts.length ? noticeParts.join(' ') : null,
           message: null,
+          savedMap: saved,
         });
         const text = [prefix, ...noticeParts, stepSpeech(plan, 0)].filter(Boolean).join(' ');
         if (!silent) speak(text, { instruction: true });
@@ -198,6 +242,12 @@ export function NavProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  const finish = useCallback(() => {
+    const { plan, dest } = ref.current;
+    if (!dest) return;
+    arrive(plan, dest.label);
+  }, [arrive]);
+
   const onCheckpoint = useCallback(
     async (loc: ConfirmedLocation): Promise<string | null> => {
       const { plan, dest, status, stepIndex } = ref.current;
@@ -253,10 +303,11 @@ export function NavProvider({ children }: { children: React.ReactNode }) {
       prev,
       repeat,
       stop,
+      finish,
       onCheckpoint,
       currentStep: state.plan?.steps?.[state.stepIndex] ?? null,
     }),
-    [state, selectDestination, planFromLocation, next, prev, repeat, stop, onCheckpoint],
+    [state, selectDestination, planFromLocation, next, prev, repeat, stop, finish, onCheckpoint],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

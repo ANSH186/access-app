@@ -1,5 +1,4 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { randomUUID } from 'expo-crypto';
 import { SaveFormat, manipulateAsync } from 'expo-image-manipulator';
 import { router, useIsFocused } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
@@ -9,14 +8,17 @@ import { useVoiceCapture } from '../hooks/useVoiceCapture';
 import { api, errorToSpeech } from '../lib/api';
 import { locationText } from '../lib/format';
 import { haptic } from '../lib/haptics';
+import { accuracyText, ensureLocationPermission, getMyLocation } from '../lib/location';
+import { loadMap, nearestNode } from '../lib/map';
 import { speak } from '../lib/speech';
 import { supabase } from '../lib/supabase';
 import { colors } from '../lib/theme';
 import { REPORT_CATEGORIES } from '../lib/types';
+import { randomUUID } from '../lib/uuid';
 import { useApp } from '../state/app';
 
 export default function ReportScreen() {
-  const { session, location } = useApp();
+  const { session, location, setLocation } = useApp();
   const focused = useIsFocused();
   const [category, setCategory] = useState<string | null>(null);
   const [description, setDescription] = useState('');
@@ -26,6 +28,7 @@ export default function ReportScreen() {
   const [perm, requestPerm] = useCameraPermissions();
   const cam = useRef<CameraView>(null);
   const [busy, setBusy] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [status, setStatus] = useState('');
 
   const say = (t: string) => {
@@ -41,7 +44,7 @@ export default function ReportScreen() {
     setBusy(true);
     setStatus('Listening to your description…');
     try {
-      const cmd = await api.commandAudio(uri);
+      const cmd = await api.transcribeAudio(uri);
       if (cmd.transcript.trim()) {
         setDescription((d) => (d ? `${d} ${cmd.transcript.trim()}` : cmd.transcript.trim()));
         say(`Added to your description: ${cmd.transcript}`);
@@ -55,8 +58,52 @@ export default function ReportScreen() {
     }
   });
 
-  async function takePhoto() {
-    if (!cam.current || busy) return;
+  async function startGps() {
+    if (locating) return;
+    setLocating(true);
+    say('Checking your location.');
+    try {
+      const perm = await ensureLocationPermission();
+      if (!perm.granted) {
+        say('Location permission was not granted. You can still send the report without a precise place.');
+        return;
+      }
+      const coords = await getMyLocation();
+      if (!coords) {
+        say('I could not get a GPS fix. You can still send the report without a precise place.');
+        return;
+      }
+      const m = await loadMap();
+      const hit = nearestNode(m, coords.latitude, coords.longitude, { searchableOnly: true, maxDistanceM: 700 });
+      if (!hit) {
+        say(
+          `I could not match you to a mapped place. GPS is ${accuracyText(coords.accuracy)}. ` +
+            'You can send the report without a precise place.',
+        );
+        return;
+      }
+      setLocation({
+        node_id: hit.node.id,
+        label: `near ${hit.node.label}`,
+        floor_level: hit.node.floor_level,
+        floor_name: hit.node.floor_name || 'NIE North Campus',
+        source: 'gps',
+        observed_at: new Date().toISOString(),
+        lat: coords.latitude,
+        lng: coords.longitude,
+        accuracy_m: coords.accuracy,
+      });
+      setUseCheckpoint(true);
+      haptic.success();
+      say(`Location set to about ${Math.round(hit.distance)} metres from ${hit.node.label}. GPS is ${accuracyText(coords.accuracy)}.`);
+    } catch (e) {
+      say(`I could not check your location. ${errorToSpeech(e)}`);
+    } finally {
+      setLocating(false);
+    }
+  }
+
+  async function takePhoto() {    if (!cam.current || busy) return;
     setBusy(true);
     try {
       const pic = await cam.current.takePictureAsync({ quality: 0.8 });
@@ -96,12 +143,20 @@ export default function ReportScreen() {
         }
         photoPath = path;
       }
+      const campusLocation =
+        !!location && (location.floor_name.toLowerCase().includes('campus') || location.source === 'gps');
+      const attachNode = useCheckpoint && location && !campusLocation ? location.node_id : null;
+      const baseDescription = description.trim();
+      const withLocation =
+        useCheckpoint && location && campusLocation
+          ? `Location: ${locationText(location)}.${baseDescription ? ` ${baseDescription}` : ''}`
+          : baseDescription;
       const { error } = await supabase.from('obstacle_reports').insert({
         reporter_id: session.user.id,
         category,
-        description: description.trim() || null,
+        description: withLocation || null,
         photo_path: photoPath,
-        node_id: useCheckpoint && location ? location.node_id : null,
+        node_id: attachNode,
       });
       if (error) {
         say(`Your report was not sent. ${error.message}`);
@@ -167,6 +222,12 @@ export default function ReportScreen() {
         />
       )}
       <BigButton
+        label={locating ? 'Checking GPS…' : 'Use my current GPS location'}
+        hint="Best outdoors. Finds the nearest mapped place."
+        disabled={locating}
+        onPress={startGps}
+      />
+      <BigButton
         label="Near the corridor I'm in (no checkpoint)"
         selected={!useCheckpoint || !location}
         onPress={() => setUseCheckpoint(false)}
@@ -197,6 +258,11 @@ export default function ReportScreen() {
       )}
 
       <LiveText>{status}</LiveText>
+      <Body muted>
+        {useCheckpoint && location
+          ? `The report will be attached to ${locationText(location)}.`
+          : 'No precise place will be attached. Staff can still read your description.'}
+      </Body>
       <BigButton label="Send report" variant="primary" minHeight={80} disabled={busy} onPress={submit} />
       <BigButton label="My reports" onPress={() => router.push('/my-reports')} />
     </Screen>

@@ -190,9 +190,12 @@ def build_steps(m: MapData, node_ids: list[str], edge_ids: list[str]) -> tuple[l
     heading: tuple[float, float] | None = None
     orient = ""
     start = nodes[0]
-    if start.kind == "entrance":
+    on_campus = "campus" in start.floor_name.lower()
+    if start.kind == "entrance" and not on_campus:
         heading = (0.0, 1.0)  # assume entering heading north
         orient = f"You are at the {clean_label(start.label).lower()}, facing into the building. "
+    elif on_campus:
+        orient = f"You are at {np(start.label)}. "
     prev_vertical = False
     arrival_side: str | None = None
     door_final = False
@@ -244,6 +247,39 @@ def build_steps(m: MapData, node_ids: list[str], edge_ids: list[str]) -> tuple[l
             add(i, j + 1, text, sum(x.length_m for x in edges[i : j + 1]), e.kind)
             heading = None
             prev_vertical = True
+            i = j + 1
+            continue
+
+        # ---- outdoor campus path run (merge collinear outdoor edges)
+        if e.kind == "outdoor" and a.kind == "corridor" and b.kind == "corridor":
+            h0 = _heading(a, b)
+            j = i
+            while (
+                j + 1 < len(edges)
+                and edges[j + 1].kind == "outdoor"
+                and nodes[j + 1].kind == "corridor"
+                and nodes[j + 2].kind == "corridor"
+                and nodes[j + 1].floor_level == a.floor_level
+                and not nodes[j + 1].qr_token
+                and _dot(h0, _heading(nodes[j + 1], nodes[j + 2])) > 0
+                and abs(_cross(h0, _heading(nodes[j + 1], nodes[j + 2]))) < 0.1
+            ):
+                j += 1
+            end = nodes[j + 1]
+            length = sum(x.length_m for x in edges[i : j + 1])
+            if heading is None:
+                text = f"Walk {metres(length)} along the path."
+            else:
+                t = turn_of(heading, h0)
+                if t == "straight":
+                    text = f"Continue straight for {metres(length)}."
+                elif t == "around":
+                    text = f"Turn around and walk {metres(length)} along the path."
+                else:
+                    text = f"Turn {t} and walk {metres(length)} along the path."
+            add(i, j + 1, text, length, "outdoor")
+            heading = h0
+            prev_vertical = False
             i = j + 1
             continue
 
@@ -301,6 +337,27 @@ def build_steps(m: MapData, node_ids: list[str], edge_ids: list[str]) -> tuple[l
             else:
                 text = f"Walk {n} to {np(b.label)} door."
             door_final = True
+        elif last and b.kind in ROOM_KINDS and e.kind == "outdoor":
+            target = np(b.label, capital=True)
+            if turn in ("left", "right"):
+                text = f"{target} is on your {turn}. Turn {turn} and walk {n} to the entrance."
+                arrival_side = turn
+            elif turn == "straight":
+                text = f"{target} is straight ahead. Walk {n} to the entrance."
+                arrival_side = "straight"
+            else:
+                text = f"Walk {n} to {np(b.label)}."
+            door_final = True
+        elif e.kind == "outdoor" and a.kind in ROOM_KINDS:
+            text = f"Leave {np(a.label)} and walk {n} along the path."
+        elif e.kind == "outdoor" and b.kind == "corridor":
+            target = "the next path junction"
+            if turn in ("left", "right"):
+                text = f"Turn {turn} and walk {n} to {target}."
+            elif turn == "around":
+                text = f"Turn around and walk {n} to {target}."
+            else:
+                text = f"Walk {n} to {target}."
         elif prev_vertical:
             what = "lift" if a.kind == "lift" else "staircase"
             where = _corridor_phrase(m, b)
@@ -327,6 +384,7 @@ def build_steps(m: MapData, node_ids: list[str], edge_ids: list[str]) -> tuple[l
         i += 1
 
     # ---- arrival
+    on_campus = "campus" in dest.floor_name.lower()
     if door_final and arrival_side in ("left", "right"):
         arrival = (
             f"{np(dest.label, True)} should be on your {arrival_side}. "
@@ -336,6 +394,11 @@ def build_steps(m: MapData, node_ids: list[str], edge_ids: list[str]) -> tuple[l
         arrival = (
             f"You should now be at {np(dest.label)}. "
             "Use Read Sign or a checkpoint to confirm before going in."
+        )
+    elif on_campus:
+        arrival = (
+            f"You should now be near {np(dest.label)}. "
+            "Check the building name or ask someone if you are unsure."
         )
     else:
         arrival = f"You have arrived at {np(dest.label)}."

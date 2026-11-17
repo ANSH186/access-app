@@ -5,6 +5,7 @@ import { View } from 'react-native';
 import { BigButton, Body, Heading, LiveText, Screen } from '../components/ui';
 import { locationText } from '../lib/format';
 import { haptic } from '../lib/haptics';
+import { loadMap } from '../lib/map';
 import { speak } from '../lib/speech';
 import { supabase } from '../lib/supabase';
 import { colors } from '../lib/theme';
@@ -68,15 +69,27 @@ export default function ScanScreen() {
     }
     try {
       const { data, error } = await supabase.rpc('resolve_checkpoint', { p_qr_token: token });
-      if (error) {
-        lastIgnored.current = { token, at: Date.now() };
-        say('I could not check that code. Check your connection, or choose your location from the list.');
-        haptic.error();
-        return;
-      }
-      const row = (Array.isArray(data) ? data[0] : data) as
+      let row = (Array.isArray(data) ? data[0] : data) as
         | { node_id: string; label: string; floor_level: number; floor_name: string }
         | undefined;
+      if (error || !row) {
+        // Campus QR tokens are bundled in the app map. They may not be in the
+        // database yet, so resolve them locally instead of rejecting the scan.
+        try {
+          const m = await loadMap();
+          const n = Object.values(m.nodes).find((x) => x.qr_token === token);
+          if (n) {
+            row = {
+              node_id: n.id,
+              label: n.label,
+              floor_level: n.floor_level,
+              floor_name: n.floor_name,
+            };
+          }
+        } catch {
+          /* ignore */
+        }
+      }
       if (!row) {
         lastIgnored.current = { token, at: Date.now() };
         say('That code is not an AccessAble checkpoint. Keep scanning.');
@@ -109,19 +122,37 @@ export default function ScanScreen() {
       .select('id,label,floors(level,name)')
       .not('qr_token', 'is', null);
     setLoadingList(false);
-    if (error || !data) {
-      say('I could not load the checkpoint list. Check your connection and try again.');
+    const list: CheckpointRow[] = [];
+    if (!error && data) {
+      for (const d of data) {
+        const f = Array.isArray(d.floors) ? d.floors[0] : d.floors;
+        list.push({
+          id: d.id as string,
+          label: d.label as string,
+          floor_level: (f?.level as number) ?? 0,
+          floor_name: (f?.name as string) ?? '',
+        });
+      }
+    }
+    // Add bundled campus checkpoints (including ones not yet seeded into the DB).
+    try {
+      const m = await loadMap();
+      for (const n of Object.values(m.nodes)) {
+        if (!n.qr_token || list.some((r) => r.id === n.id)) continue;
+        list.push({
+          id: n.id,
+          label: n.label,
+          floor_level: n.floor_level,
+          floor_name: n.floor_name,
+        });
+      }
+    } catch {
+      /* ignore */
+    }
+    if (!list.length) {
+      say('I could not load the checkpoint list. Check your connection, or use GPS on the Where am I screen.');
       return;
     }
-    const list: CheckpointRow[] = data.map((d) => {
-      const f = Array.isArray(d.floors) ? d.floors[0] : d.floors;
-      return {
-        id: d.id as string,
-        label: d.label as string,
-        floor_level: (f?.level as number) ?? 0,
-        floor_name: (f?.name as string) ?? '',
-      };
-    });
     list.sort((a, b) => a.floor_level - b.floor_level || a.label.localeCompare(b.label));
     setRows(list);
     say(`${list.length} places to choose from. Swipe to browse.`);
@@ -208,6 +239,12 @@ export default function ScanScreen() {
         </View>
       )}
       <LiveText>{status}</LiveText>
+      <BigButton
+        label="Use GPS instead"
+        hint="Open the Where am I screen to use your phone's location"
+        variant="secondary"
+        onPress={() => router.replace('/where-am-i')}
+      />
       <BigButton
         label="I can't scan — choose my location"
         hint="Pick your location from a list of checkpoints. Less certain than scanning."

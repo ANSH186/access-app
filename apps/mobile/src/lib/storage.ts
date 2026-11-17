@@ -4,6 +4,7 @@ import type { ConfirmedLocation } from './types';
 const LOC_KEY = 'aa.confirmedLocation';
 const PENDING_PROFILE_KEY = 'aa.pendingProfile';
 const ALERT_KEY = 'aa.lastAlertId';
+const HANDS_FREE_KEY = 'aa.handsFree';
 
 export async function loadLocation(): Promise<ConfirmedLocation | null> {
   try {
@@ -51,5 +52,22 @@ export async function loadLastAlertId() {
     return await AsyncStorage.getItem(ALERT_KEY);
   } catch {
     return null;
+  }
+}
+
+export async function loadHandsFree(): Promise<boolean> {
+  try {
+    return (await AsyncStorage.getItem(HANDS_FREE_KEY)) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export async function saveHandsFree(value: boolean) {
+  try {
+    if (value) await AsyncStorage.setItem(HANDS_FREE_KEY, '1');
+    else await AsyncStorage.removeItem(HANDS_FREE_KEY);
+  } catch {
+    /* ignore */
   }
 }

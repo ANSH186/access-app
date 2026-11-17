@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import logging
 import time
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from contextlib import asynccontextmanager
 
@@ -17,7 +19,7 @@ from .config import Settings, get_settings
 from .db import Database
 from .errors import AppError
 from .logging_setup import setup_logging
-from .routers import ai, destinations, health, routes
+from .routers import ai, campus, destinations, health, location, news, routes
 
 log = logging.getLogger("aa.api")
 
@@ -99,6 +101,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(routes.router)
     app.include_router(destinations.router)
     app.include_router(ai.router)
+    app.include_router(location.router)
+    app.include_router(campus.router)
+    app.include_router(news.router)
+
+    static_dir = Path(__file__).resolve().parent / "static"
+    if static_dir.is_dir():
+        app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
     return app
 
 

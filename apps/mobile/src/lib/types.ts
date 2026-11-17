@@ -21,6 +21,9 @@ export type ConfirmedLocation = {
   floor_name: string;
   source: LocationSource;
   observed_at: string; // ISO
+  lat?: number;
+  lng?: number;
+  accuracy_m?: number | null;
 };
 
 export type RouteStep = {
@@ -32,6 +35,9 @@ export type RouteStep = {
   length_m: number;
   kind: string;
   checkpoint_qr: string | null;
+  to_label?: string;
+  to_lat?: number;
+  to_lng?: number;
 };
 
 export type RoutePlan = {
@@ -79,6 +85,7 @@ export type Intent =
   | 'report_problem'
   | 'sos'
   | 'where_am_i'
+  | 'news'
   | 'repeat'
   | 'cancel'
   | 'help'
@@ -151,4 +158,47 @@ export type ObstacleReport = {
   status: string;
   created_at: string;
   updated_at: string;
+};
+
+export type NewsItem = {
+  id: string;
+  title: string;
+  summary: string;
+  source: string;
+  category: string;
+  link: string;
+  published: string | null;
+  published_iso: string | null;
+};
+
+export type NewsBriefing = {
+  briefing: string;
+  items: NewsItem[];
+};
+
+export type PlaceInfo = {
+  lat: number;
+  lng: number;
+  display_name?: string | null;
+  short?: string | null;
+  nearest?: {
+    node_id: string;
+    label: string;
+    distance_m: number;
+    bearing?: string | null;
+    kind?: string;
+  } | null;
+  on_campus?: boolean;
+  description: string;
+  place_name?: string | null;
+  confidence?: 'high' | 'medium' | 'low';
+};
+
+export type Diagnostics = {
+  status: string;
+  version: string;
+  map: { ok: boolean; source: string; nodes: number; campus_nodes: number };
+  ai: { configured: boolean; model: string; timeout_s: number };
+  database: { configured: boolean; map_mode: string };
+  news: { enabled: boolean };
 };

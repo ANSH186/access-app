@@ -6,14 +6,25 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ApiStatusBanner } from '../components/ApiStatusBanner';
 import { SetupScreen } from '../components/SetupScreen';
 import { SosBar } from '../components/SosBar';
+import { VoiceBar } from '../components/VoiceBar';
 import { TestBadge } from '../components/ui';
 import { envOk } from '../lib/env';
+import { api } from '../lib/api';
 import { colors } from '../lib/theme';
 import { AppProvider, useApp } from '../state/app';
 import { NavProvider } from '../state/nav';
+import { VoiceActionsProvider } from '../state/voice';
 
 function Gate() {
   const { ready, session, reduceMotion } = useApp();
+  React.useEffect(() => {
+    const ping = () => {
+      api.health().catch(() => undefined);
+    };
+    ping();
+    const t = setInterval(ping, 60_000);
+    return () => clearInterval(t);
+  }, []);
   if (!ready) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: 'center' }}>
@@ -42,7 +53,11 @@ function Gate() {
           <Stack.Screen name="index" options={title('AccessAble')} />
           <Stack.Screen name="navigate" options={title('Navigate')} />
           <Stack.Screen name="camera" options={title('Camera')} />
-          <Stack.Screen name="scan" options={title('Where am I')} />
+          <Stack.Screen name="scan" options={title('Scan checkpoint')} />
+          <Stack.Screen name="where-am-i" options={title('Where am I')} />
+          <Stack.Screen name="news" options={title('News')} />
+          <Stack.Screen name="help" options={title('Voice help')} />
+          <Stack.Screen name="more" options={title('More options')} />
           <Stack.Screen name="report" options={title('Report a problem')} />
           <Stack.Screen name="my-reports" options={title('My reports')} />
           <Stack.Screen name="settings" options={title('Settings')} />
@@ -51,6 +66,7 @@ function Gate() {
         </Stack.Protected>
       </Stack>
       <ApiStatusBanner />
+      <VoiceBar />
       <SosBar />
     </View>
   );
@@ -62,9 +78,11 @@ export default function RootLayout() {
       <StatusBar style="light" />
       {envOk ? (
         <AppProvider>
-          <NavProvider>
-            <Gate />
-          </NavProvider>
+          <VoiceActionsProvider>
+            <NavProvider>
+              <Gate />
+            </NavProvider>
+          </VoiceActionsProvider>
         </AppProvider>
       ) : (
         <SetupScreen />

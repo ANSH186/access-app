@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { haptic } from '../lib/haptics';
 import { colors, sizes } from '../lib/theme';
+import { useVoiceAction } from '../state/voice';
 
 export function Screen({
   children,
@@ -103,6 +104,7 @@ export function BigButton({
   style,
   accessibilityLabel,
   silentHaptic,
+  voiceHidden,
 }: {
   label: string;
   hint?: string;
@@ -116,8 +118,16 @@ export function BigButton({
   style?: StyleProp<ViewStyle>;
   accessibilityLabel?: string;
   silentHaptic?: boolean;
+  voiceHidden?: boolean;
 }) {
   const v = variantStyles[variant];
+  const id = React.useId();
+  useVoiceAction(
+    id,
+    accessibilityLabel ?? label,
+    voiceHidden ? undefined : onPress,
+    !!disabled,
+  );
   return (
     <Pressable
       accessibilityRole="button"

@@ -9,8 +9,9 @@ from fastapi import File as FormFile
 from ..ai import prompts
 from ..ai.gemini import GeminiClient, inline_part, text_part
 from ..auth import AuthUser
-from ..deps import ai_user, get_gemini, get_map_data
+from ..deps import ai_user, get_gemini, get_map_data, get_map_data_optional
 from ..errors import AppError
+from ..geocode import reverse_geocode
 from ..navigation.graph import MapData
 from ..navigation.search import best_match
 
@@ -39,12 +40,13 @@ SOS_RE = re.compile(
 REPLIES = {
     "sos": "Opening emergency help. Confirm on the screen to send an alert.",
     "read_sign": "Opening the sign reader.",
-    "describe_scene": "Describing what is in front of you.",
+    "describe_scene": "Opening the camera to describe what is in front of you.",
     "report_problem": "Opening the report form.",
     "where_am_i": "Checking where you are.",
+    "news": "Opening your news briefing.",
     "repeat": "Repeating the last instruction.",
     "cancel": "Okay, cancelled.",
-    "help": "You can say: take me to the library, read this sign, what is in front of me, report a problem, or emergency.",
+    "help": "You can say: take me to the library, read this sign, what is in front of me, where am I, news, report a problem, or emergency.",
     "unknown": "Sorry, I did not catch that. Please try again.",
 }
 
@@ -131,12 +133,43 @@ async def vision_describe(
     request: Request,
     image: UploadFile = FormFile(...),
     question: str | None = Form(None),
+    lat: float | None = Form(None),
+    lng: float | None = Form(None),
+    place: str | None = Form(None),
     user: AuthUser = Depends(ai_user),
     gemini: GeminiClient = Depends(get_gemini),
+    m: MapData | None = Depends(get_map_data_optional),
 ) -> dict:
     data, mime = await _image(image, request)
     q = _clean(question)
-    prompt = prompts.VISION_PROMPT + (f"\nThe user asks: {q}" if q else "")
+    location_lines: list[str] = []
+    supplied_place = _clean(place)
+    if supplied_place:
+        location_lines.append(f"the user says this is: {supplied_place}")
+    if lat is not None and lng is not None:
+        location_lines.append(f"device coordinates: {lat:.5f}, {lng:.5f}")
+        try:
+            ctx = await reverse_geocode(lat, lng)
+            if ctx.display_name:
+                location_lines.append(f"reverse-geocoded address: {ctx.display_name}")
+        except Exception:  # noqa: BLE001
+            pass
+        if m is not None:
+            hit = m.nearest_node(lat, lng, searchable_only=True, max_distance_m=800)
+            if hit:
+                node, distance = hit
+                location_lines.append(
+                    f"nearest mapped campus landmark: {node.label}, about {round(distance)} metres away"
+                )
+
+    location_text = ""
+    if location_lines:
+        location_text = (
+            "\nLocation context (use only to orient the person; the photo is the source of truth):\n- "
+            + "\n- ".join(location_lines)
+        )
+        location_text += "\nIf the photo does not match this location, describe what you actually see."
+    prompt = prompts.VISION_PROMPT + location_text + (f"\nThe user asks: {q}" if q else "")
     out = await gemini.generate_json(
         [text_part(prompt), inline_part(data, mime)], prompts.VISION_SCHEMA, prompts.VISION_SYSTEM
     )
@@ -146,8 +179,44 @@ async def vision_describe(
     if not description:
         description = "I could not make out what is in front of the camera. Try again with better light."
         confidence, answer = "low", None
-    log.info("vision", extra={"user": user.id, "confidence": confidence})
+    log.info("vision", extra={"user": user.id, "confidence": confidence, "located": bool(lat is not None)})
     return {"description": description, "answer": answer, "confidence": confidence, "caution": CAUTION}
+
+
+@router.post("/assistant/transcribe")
+async def assistant_transcribe(
+    request: Request,
+    audio: UploadFile | None = FormFile(None),
+    text: str | None = Form(None),
+    user: AuthUser = Depends(ai_user),
+    gemini: GeminiClient = Depends(get_gemini),
+) -> dict:
+    """Transcribe (or classify) without needing the map.
+
+    Camera questions, report dictation and news questions only need text. This
+    endpoint keeps working even if the campus map is unavailable.
+    """
+    typed = _clean(text)
+    has_audio = audio is not None and bool(audio.filename or audio.content_type)
+    if not has_audio and not typed:
+        raise AppError(400, "missing_input", "Please say or type what you want to do.")
+    if has_audio:
+        mime = _resolve_mime(audio, AUDIO_TYPES, AUDIO_EXT)
+        if mime is None:
+            raise AppError(415, "unsupported_media_type", "That audio type is not supported. Please record again.")
+        data = await _read_limited(
+            audio, request.app.state.settings.max_audio_bytes, "That recording is too long. Please keep it short."
+        )
+        parts = [text_part("Transcribe this short spoken question or command."), inline_part(data, mime)]
+    else:
+        parts = [text_part(f"Classify this command: {typed}")]
+    out = await gemini.generate_json(parts, prompts.COMMAND_SCHEMA, prompts.COMMAND_SYSTEM)
+    transcript = _clean(out.get("transcript")) or ("" if has_audio else typed)
+    intent = out.get("intent") if out.get("intent") in prompts.INTENTS else "unknown"
+    if SOS_RE.search(transcript):
+        intent = "sos"
+    query = _clean(out.get("destination_query")) or None
+    return {"transcript": transcript, "intent": intent, "destination_query": query}
 
 
 @router.post("/assistant/command")
@@ -194,6 +263,8 @@ async def assistant_command(
     if intent == "navigate":
         if not query:
             reply = "Where would you like to go? Say the room name."
+        elif m is None:
+            reply = f"Finding a route to {query}."
         else:
             hit = best_match(m, query)
             if hit:
@@ -207,7 +278,7 @@ async def assistant_command(
             else:
                 reply = f"I couldn't find {query} on the map. Try saying the room name again."
     else:
-        reply = REPLIES[intent]
+        reply = REPLIES.get(intent, REPLIES["unknown"])
     log.info("command", extra={"user": user.id, "intent": intent, "found": destination is not None})
     return {
         "transcript": transcript,

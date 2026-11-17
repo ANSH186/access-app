@@ -3,7 +3,7 @@
     "name": "AccessAble",
     "slug": "accessable-ai",
     "scheme": "accessable",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -12,7 +12,9 @@
       "supportsTablet": false,
       "infoPlist": {
         "NSCameraUsageDescription": "AccessAble uses the camera to read signs, describe scenes and scan location checkpoints.",
-        "NSMicrophoneUsageDescription": "AccessAble uses the microphone for voice commands."
+        "NSMicrophoneUsageDescription": "AccessAble uses the microphone for voice commands.",
+        "NSLocationWhenInUseUsageDescription": "AccessAble uses your location to tell you where you are and to guide you around campus.",
+        "NSSpeechRecognitionUsageDescription": "AccessAble uses speech recognition so you can control the app by voice."
       }
     },
     "android": {
@@ -22,7 +24,12 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "permissions": ["android.permission.CAMERA", "android.permission.RECORD_AUDIO"],
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
+      ],
       "predictiveBackGestureEnabled": false
     },
     "plugins": [
@@ -36,6 +43,19 @@
         {
           "cameraPermission": "AccessAble uses the camera to read signs, describe scenes and scan location checkpoints.",
           "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "AccessAble uses your location to tell you where you are and to guide you around campus."
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "AccessAble uses the microphone for voice commands.",
+          "speechRecognitionPermission": "AccessAble uses speech recognition so you can control the app by voice."
         }
       ],
       "expo-asset"

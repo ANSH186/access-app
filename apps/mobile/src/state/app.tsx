@@ -5,6 +5,8 @@ import { setSpeechRate } from '../lib/speech';
 import { supabase } from '../lib/supabase';
 import {
   loadLocation,
+  loadHandsFree,
+  saveHandsFree,
   saveLocation,
   takePendingProfile,
 } from '../lib/storage';
@@ -17,7 +19,9 @@ type AppState = {
   location: ConfirmedLocation | null;
   activeAlert: EmergencyAlert | null;
   reduceMotion: boolean;
+  handsFree: boolean;
   setLocation: (loc: ConfirmedLocation | null) => void;
+  setHandsFree: (v: boolean) => void;
   updateProfile: (patch: Partial<Profile>) => Promise<string | null>;
   refreshProfile: () => Promise<void>;
   refreshActiveAlert: () => Promise<EmergencyAlert | null>;
@@ -39,6 +43,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [location, setLocationState] = useState<ConfirmedLocation | null>(null);
   const [activeAlert, setActiveAlert] = useState<EmergencyAlert | null>(null);
   const [reduceMotion, setReduceMotion] = useState(false);
+  const [handsFree, setHandsFreeState] = useState(false);
   const sessionRef = useRef<Session | null>(null);
 
   useEffect(() => {
@@ -50,6 +55,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let mounted = true;
     loadLocation().then((l) => mounted && l && setLocationState(l));
+    loadHandsFree().then((v) => mounted && setHandsFreeState(v));
     supabase.auth.getSession().then(({ data }) => {
       if (!mounted) return;
       sessionRef.current = data.session;
@@ -122,6 +128,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     saveLocation(loc);
   }, []);
 
+  const setHandsFree = useCallback((v: boolean) => {
+    setHandsFreeState(v);
+    saveHandsFree(v);
+  }, []);
+
   const updateProfile = useCallback(async (patch: Partial<Profile>) => {
     const s = sessionRef.current;
     if (!s) return 'You are not signed in.';
@@ -148,13 +159,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       location,
       activeAlert,
       reduceMotion,
+      handsFree,
       setLocation,
+      setHandsFree,
       updateProfile,
       refreshProfile,
       refreshActiveAlert,
       signOut,
     }),
-    [ready, session, profile, location, activeAlert, reduceMotion, setLocation, updateProfile, refreshProfile, refreshActiveAlert, signOut],
+    [ready, session, profile, location, activeAlert, reduceMotion, handsFree, setLocation, setHandsFree, updateProfile, refreshProfile, refreshActiveAlert, signOut],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

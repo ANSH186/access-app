@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
-import { Body, Heading, LiveText, Screen, styles as ui } from '../components/ui';
+import { router } from 'expo-router';
+import { BigButton, Body, Heading, LiveText, Screen, styles as ui } from '../components/ui';
 import { speak } from '../lib/speech';
 import { supabase } from '../lib/supabase';
 import { colors } from '../lib/theme';
@@ -72,6 +73,12 @@ export default function MyReports() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reports === null]);
 
+  useEffect(() => {
+    if (!session) return;
+    const poll = setInterval(load, 30_000);
+    return () => clearInterval(poll);
+  }, [load, session]);
+
   return (
     <Screen>
       <Heading>My reports</Heading>
@@ -93,6 +100,9 @@ export default function MyReports() {
           <Body muted>Sent {new Date(r.created_at).toLocaleString()}</Body>
         </View>
       ))}
+      <BigButton label="Refresh" onPress={load} />
+      <BigButton label="Report another problem" onPress={() => router.push('/report')} />
+      <BigButton label="Back to home" variant="primary" onPress={() => router.replace('/')} />
     </Screen>
   );
 }

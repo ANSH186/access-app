@@ -1,7 +1,7 @@
-import { randomUUID } from 'expo-crypto';
 import { supabase } from './supabase';
 import type { ConfirmedLocation, EmergencyAlert, Profile } from './types';
 import { locationText } from './format';
+import { randomUUID } from './uuid';
 
 // One client_request_id per SOS attempt (the flow started by pressing "Send SOS").
 // "Try again" after a failure reuses it: create_emergency is idempotent on
@@ -56,11 +56,16 @@ export async function sendSos({ emergencyType, profile, location }: SosArgs): Pr
     p_is_test: true,
   };
   if (share && location) {
-    args.p_node_id = location.node_id;
+    const campus = location.floor_name.toLowerCase().includes('campus') || location.source === 'gps';
+    if (!campus) args.p_node_id = location.node_id;
     args.p_location_source = location.source;
-    const suffix = location.source === 'qr_checkpoint' ? ' (QR)' : ' (chosen by hand)';
+    const suffix =
+      location.source === 'qr_checkpoint' ? ' (QR)' : location.source === 'gps' ? ' (GPS)' : ' (chosen by hand)';
     args.p_location_label = `${locationText(location)}${suffix}`;
     args.p_location_observed_at = location.observed_at; // when confirmed, NOT now
+    if (location.lat != null) args.p_lat = location.lat;
+    if (location.lng != null) args.p_lng = location.lng;
+    if (location.accuracy_m != null) args.p_accuracy_m = location.accuracy_m;
   }
 
   let lastError = 'Could not reach the server.';

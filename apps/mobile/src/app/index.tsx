@@ -1,38 +1,48 @@
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { Body, BigButton, Field, LiveText, Screen, styles as uiStyles } from '../components/ui';
-import { useVoiceCapture } from '../hooks/useVoiceCapture';
 import { useTicker } from '../hooks/useTicker';
 import { api, errorToSpeech } from '../lib/api';
-import { isStale, locationLine, locationText, ageText } from '../lib/format';
-import { getLastInstruction, speak } from '../lib/speech';
+import { isStale, locationLine } from '../lib/format';
+import { speak } from '../lib/speech';
 import { colors } from '../lib/theme';
 import type { CommandResult } from '../lib/types';
 import { useApp } from '../state/app';
 import { useNav } from '../state/nav';
 
-const HELP_TEXT =
-  'You can say: take me to the library. Read this sign. Describe the scene. Where am I. Report a problem. Repeat. Cancel. Or, I need help.';
-
 export default function Home() {
-  const { location, profile, activeAlert, refreshActiveAlert, reduceMotion } = useApp();
+  const { location, profile, activeAlert, refreshActiveAlert, handsFree } = useApp();
   const nav = useNav();
   const now = useTicker();
   const [status, setStatus] = useState('');
   const [typed, setTyped] = useState('');
+  const [showTyped, setShowTyped] = useState(false);
   const [busy, setBusy] = useState(false);
+  const welcomed = useRef(false);
 
   useEffect(() => {
     refreshActiveAlert();
   }, [refreshActiveAlert]);
+
+  useEffect(() => {
+    if (welcomed.current) return;
+    welcomed.current = true;
+    const place = location ? locationLine(location, now) : 'Your location is not confirmed yet.';
+    const alert = activeAlert ? ' You have an active SOS alert.' : '';
+    speak(
+      `AccessAble. ${place}.${alert} Say take me to the library, or press a button. ` +
+        'Press the Talk button at the bottom at any time and say what you need.',
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const say = useCallback((t: string) => {
     setStatus(t);
     speak(t);
   }, []);
 
-  const route = useCallback(
+  const routeCommand = useCallback(
     (res: CommandResult) => {
       setStatus(res.reply || '');
       switch (res.intent) {
@@ -49,37 +59,25 @@ export default function Home() {
           break;
         }
         case 'read_sign':
-          speak(res.reply);
           router.push({ pathname: '/camera', params: { mode: 'sign' } });
           break;
         case 'describe_scene':
-          speak(res.reply);
           router.push({ pathname: '/camera', params: { mode: 'scene' } });
           break;
         case 'report_problem':
-          speak(res.reply);
           router.push('/report');
           break;
-        case 'where_am_i': {
-          if (location && !isStale(location)) {
-            say(`You were last confirmed at ${locationText(location)}, ${ageText(location.observed_at)}.`);
-          } else if (location) {
-            say(
-              `You were last confirmed at ${locationText(location)}, ${ageText(location.observed_at)}. That may be out of date. Opening the checkpoint scanner.`,
-            );
-            router.push('/scan');
-          } else {
-            say('Your location is not confirmed. Opening the checkpoint scanner.');
-            router.push('/scan');
-          }
+        case 'where_am_i':
+          router.push('/where-am-i');
           break;
-        }
+        case 'news':
+          router.push('/news');
+          break;
         case 'sos':
-          // Never sends anything: only opens the confirmation screen.
           router.push('/sos');
           break;
         case 'repeat':
-          say(getLastInstruction() ?? 'There is nothing to repeat yet.');
+          speak('Use the Talk button and say repeat, or press the Repeat button on the screen.');
           break;
         case 'cancel':
           nav.stop();
@@ -88,71 +86,43 @@ export default function Home() {
         case 'help':
         case 'unknown':
         default:
-          say(`${res.reply ? res.reply + ' ' : ''}${HELP_TEXT}`);
+          router.push('/help');
       }
     },
-    [location, nav, say],
+    [nav],
   );
 
-  const runCommand = useCallback(
-    async (p: Promise<CommandResult>) => {
-      setBusy(true);
-      setStatus('Working on it…');
-      try {
-        const res = await p;
-        if (res.transcript) setStatus(`I heard: “${res.transcript}”`);
-        route(res);
-      } catch (e) {
-        say(`${errorToSpeech(e)} You can use the buttons instead.`);
-      } finally {
-        setBusy(false);
-      }
-    },
-    [route, say],
-  );
-
-  const voice = useVoiceCapture(async (uri) => {
-    await runCommand(api.commandAudio(uri));
-  });
-
-  const sendTyped = () => {
+  const sendTyped = async () => {
     const t = typed.trim();
     if (!t || busy) return;
     setTyped('');
-    runCommand(api.commandText(t));
+    setBusy(true);
+    try {
+      routeCommand(await api.commandText(t));
+    } catch (e) {
+      say(errorToSpeech(e));
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const recording = voice.state === 'recording';
-  const pulse = useRef(new Animated.Value(1)).current;
-  useEffect(() => {
-    if (!recording || reduceMotion) {
-      pulse.setValue(1);
-      return;
-    }
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 0.6, duration: 600, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 1, duration: 600, useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [recording, reduceMotion, pulse]);
-
-  const talkLabel = recording ? 'Listening… release to send' : voice.state === 'processing' ? 'Working…' : 'Hold to talk';
+  const stale = location && isStale(location, now);
 
   return (
     <Screen>
       <View style={uiStyles.card} accessible accessibilityLabel={locationLine(location, now)}>
         <Text
           accessibilityLiveRegion="polite"
-          style={{ color: location && !isStale(location, now) ? colors.text : colors.accent, fontSize: 20, fontWeight: '700' }}
+          style={{
+            color: location && !stale ? colors.text : colors.accent,
+            fontSize: 21,
+            fontWeight: '700',
+            lineHeight: 29,
+          }}
         >
           {locationLine(location, now)}
         </Text>
-        {location && isStale(location, now) && (
-          <Body muted>This is more than 15 minutes old. Scan a checkpoint to update it.</Body>
-        )}
+        {stale && <Body muted>This is more than 15 minutes old. Use Where am I to update it.</Body>}
       </View>
 
       {nav.dest && (
@@ -165,55 +135,24 @@ export default function Home() {
 
       {activeAlert && (
         <BigButton
-          label="You have an active SOS alert — see status"
-          variant="ghost"
+          label="You have an active SOS alert — hear the status"
+          variant="danger"
           onPress={() => router.push('/sos-status')}
         />
       )}
 
-      <Animated.View style={{ opacity: pulse }}>
-        <BigButton
-          label={talkLabel}
-          accessibilityLabel="Hold to talk"
-          hint="Press and hold, say a command such as take me to the library, then release. If you use TalkBack, use the Tap to talk button instead."
-          variant="primary"
-          minHeight={140}
-          silentHaptic
-          selected={recording}
-          disabled={busy || voice.state === 'processing'}
-          onPressIn={() => {
-            if (voice.state === 'idle') voice.start();
-          }}
-          onPressOut={() => {
-            if (voice.state === 'recording' || voice.state === 'starting') voice.finish();
-          }}
-        />
-      </Animated.View>
-      <BigButton
-        label={recording ? 'Tap to stop and send' : 'Tap to talk'}
-        hint={recording ? 'Stops recording and sends your command.' : 'Starts recording. Tap again when you have finished speaking.'}
-        variant="secondary"
-        disabled={busy || voice.state === 'processing' || voice.state === 'starting'}
-        onPress={() => voice.toggle()}
-      />
-
-      <LiveText>{status}</LiveText>
-
-      <Field
-        label="Or type a command"
-        hint="For example: take me to the library"
-        value={typed}
-        onChangeText={setTyped}
-        onSubmitEditing={sendTyped}
-        returnKeyType="send"
-        autoCapitalize="none"
-      />
-      <BigButton label="Send typed command" onPress={sendTyped} disabled={busy || !typed.trim()} />
-
       <BigButton
         label="Navigate"
-        hint="Choose a destination and get step by step directions"
+        hint="Choose a destination and get step by step directions, indoors or on NIE North Campus"
+        variant="primary"
+        minHeight={88}
         onPress={() => router.push('/navigate')}
+      />
+      <BigButton
+        label="Where am I"
+        hint="Use GPS, scan a checkpoint, or choose your location from a list"
+        minHeight={80}
+        onPress={() => router.push('/where-am-i')}
       />
       <BigButton
         label="Read sign"
@@ -222,22 +161,43 @@ export default function Home() {
       />
       <BigButton
         label="Describe scene"
-        hint="Opens the camera to describe what is in front of you"
+        hint="Describes any place in front of you, not just the campus"
         onPress={() => router.push({ pathname: '/camera', params: { mode: 'scene' } })}
       />
       <BigButton
-        label="Where am I — scan checkpoint"
-        hint="Scan a QR checkpoint to confirm your location"
-        onPress={() => router.push('/scan')}
+        label="News updates"
+        hint="General news headlines with an AI briefing you can ask about"
+        onPress={() => router.push('/news')}
       />
+      <BigButton label="More options" onPress={() => router.push('/more')} />
+      <BigButton label="What can I say?" variant="ghost" onPress={() => router.push('/help')} />
+
+      <LiveText>{status}</LiveText>
+
       <BigButton
-        label="Report a problem"
-        hint="Report a blocked path, broken lift or other issue"
-        onPress={() => router.push('/report')}
+        label={showTyped ? 'Hide typing' : 'Type a command instead'}
+        variant="ghost"
+        onPress={() => setShowTyped((v) => !v)}
       />
-      <BigButton label="My reports" hint="See the status of problems you reported" onPress={() => router.push('/my-reports')} />
-      <BigButton label="Settings" onPress={() => router.push('/settings')} />
-      <Body muted>AccessAble is not an emergency service. Signed in as {profile?.display_name ?? 'you'}.</Body>
+      {showTyped && (
+        <>
+          <Field
+            label="Type a command"
+            hint="For example: take me to the library"
+            value={typed}
+            onChangeText={setTyped}
+            onSubmitEditing={sendTyped}
+            returnKeyType="send"
+            autoCapitalize="none"
+          />
+          <BigButton label="Send typed command" onPress={sendTyped} disabled={busy || !typed.trim()} />
+        </>
+      )}
+
+      <Body muted>
+        Hands-free voice is {handsFree ? 'on' : 'off'}. AccessAble is not an emergency service. Signed in as{' '}
+        {profile?.display_name ?? 'you'}.
+      </Body>
     </Screen>
   );
 }
