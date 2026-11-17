@@ -173,7 +173,9 @@ export default function DocumentReader() {
   }
 
   async function ask(q: string) {
-    const text = askAll ? pages.join('\n\n') : pages[current] ?? '';
+    const text = askAll
+      ? pages.map((p, i) => `Page ${i + 1}.\n${p}`).join('\n\n')
+      : pages[current] ?? '';
     if (!text.trim()) return say('Take a page photo first, or choose a page to ask about.');
     if (!q.trim()) return;
     setBusy(true);

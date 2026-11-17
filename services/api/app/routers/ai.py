@@ -298,11 +298,50 @@ def _local_answer(text: str, question: str) -> str:
     return "I found this in the text: " + " ".join(best)
 
 
+def _select_chunks(text: str, question: str, max_chars: int = 12000) -> str:
+    """Pick the parts of a long document most likely to contain the answer."""
+    if len(text) <= max_chars:
+        return text
+    q = [w for w in re.sub(r"[^a-z0-9 ]+", " ", question.lower()).split() if len(w) > 2]
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+    if not paragraphs:
+        return text[:max_chars]
+    chunks: list[str] = []
+    buf = ""
+    for p in paragraphs:
+        if len(buf) + len(p) + 2 > 1600 and buf:
+            chunks.append(buf)
+            buf = p
+        else:
+            buf = f"{buf}\n\n{p}".strip()
+    if buf:
+        chunks.append(buf)
+    scored = []
+    for idx, chunk in enumerate(chunks):
+        low = chunk.lower()
+        score = sum(low.count(w) for w in q)
+        scored.append((score, idx, chunk))
+    scored.sort(key=lambda x: (-x[0], x[1]))
+    chosen: list[tuple[int, str]] = []
+    used = 0
+    for score, idx, chunk in scored:
+        if used + len(chunk) + 2 > max_chars:
+            continue
+        chosen.append((idx, chunk))
+        used += len(chunk) + 2
+        if used >= max_chars * 0.9:
+            break
+    if not chosen:
+        return text[:max_chars]
+    chosen.sort(key=lambda x: x[0])
+    return "\n\n".join(chunk for _, chunk in chosen)
+
+
 async def answer_from_text(gemini: GeminiClient, text: str, question: str) -> str:
     q = _clean(question)
     if not q:
         return "Please ask a question about the text."
-    body_text = text[:12000]
+    body_text = _select_chunks(text, q)
     try:
         answer = await gemini.generate_text(
             [{"text": f"Text:\n{body_text}\n\nQuestion: {q}"}],
