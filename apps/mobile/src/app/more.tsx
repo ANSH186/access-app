@@ -1,10 +1,14 @@
 import { router } from 'expo-router';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Body, BigButton, Heading, Screen } from '../components/ui';
+import { speak } from '../lib/speech';
 import { useApp } from '../state/app';
 
 export default function MoreScreen() {
   const { signOut, profile } = useApp();
+  useEffect(() => {
+    speak('More options. Report a problem, my reports, voice help, settings, or sign out.');
+  }, []);
   return (
     <Screen>
       <Heading>More options</Heading>

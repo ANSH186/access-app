@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 import { BigButton, Body, Heading, LiveText, Screen, styles as ui } from '../components/ui';
 import { api, errorToSpeech } from '../lib/api';
@@ -8,6 +8,7 @@ import {
   accuracyText,
   ensureLocationPermission,
   getMyLocation,
+  hasLocationPermission,
   reverseGeocode,
   type MyAddress,
   type MyCoords,
@@ -135,15 +136,43 @@ export default function WhereAmI() {
     }
   }, [busy, map, say, setLocation]);
 
+  const locateRef = useRef(locate);
+  locateRef.current = locate;
+
+  // If the student has already allowed location, do the useful thing without
+  // making them find another button.
+  useEffect(() => {
+    let mounted = true;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    hasLocationPermission().then((ok) => {
+      if (ok && mounted) {
+        timer = setTimeout(() => {
+          if (mounted) void locateRef.current();
+        }, 1200);
+      }
+    });
+    return () => {
+      mounted = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
+
   async function tellMeMore() {
     if (!coords) return say('Use GPS first, then I can tell you about this place.');
+    const local =
+      node && node.distance <= 700
+        ? `You are on ${node.node.floor_name || 'NIE North Campus'}, about ${Math.round(node.distance)} metres from ${node.node.label}.`
+        : address?.short
+          ? `You appear to be near ${address.short}.`
+          : 'I am looking up this place.';
+    setMsg(local);
+    speak(local);
     setBusy(true);
-    say('Looking up this place.');
     try {
       const info = await api.locationContext(coords);
       setAiInfo(info);
       const nearest = info.nearest ? ` The nearest mapped landmark is ${info.nearest.label}.` : '';
-      say(`${info.description}${nearest} ${info.confidence === 'low' ? 'I am not fully certain about this place.' : ''}`);
+      speak(`${info.description}${nearest} ${info.confidence === 'low' ? 'I am not fully certain about this place.' : ''}`);
     } catch (e) {
       say(
         `I could not get an AI description. ${

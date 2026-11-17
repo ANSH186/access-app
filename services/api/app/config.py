@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     campus_map_enabled: bool = True
     campus_map_path: str = "app/data/nie_north_campus.json"
     institution_id: str = PILOT_INSTITUTION_ID
-    ai_rate_limit_calls: int = 20
+    ai_rate_limit_calls: int = 40
     ai_rate_limit_window_s: float = 300.0
     news_cache_ttl_s: int = 300
     max_image_bytes: int = 5 * 1024 * 1024

@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Body, BigButton, Heading, Screen } from '../components/ui';
 import { speak } from '../lib/speech';
 
@@ -20,6 +20,11 @@ const COMMANDS = [
 ];
 
 export default function HelpScreen() {
+  useEffect(() => {
+    speak(
+      'Voice help. Press the Talk button at the bottom and say a command. You can also press any button by number, for example, press two.',
+    );
+  }, []);
   return (
     <Screen>
       <Heading>What can I say?</Heading>

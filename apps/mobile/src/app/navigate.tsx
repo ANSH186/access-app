@@ -46,6 +46,12 @@ export default function NavigateScreen() {
 
   useEffect(() => {
     loadMap().then(setMap).catch(() => undefined);
+    if (!params.destId && !params.q) {
+      speak(
+        'Where do you want to go? Say a place, or press one of the popular places. I will check your GPS and plan a route.',
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const choose = useCallback(
@@ -224,7 +230,6 @@ export default function NavigateScreen() {
       const d = haversineM(coords.latitude, coords.longitude, cur.to_lat, cur.to_lng);
       if (d <= 14 && (coords.accuracy == null || coords.accuracy <= 35)) {
         advancedForStep.current = key;
-        speak('You have reached the next point.');
         nav.next();
       }
     });
@@ -239,13 +244,13 @@ export default function NavigateScreen() {
     setBusy(true);
     setMsg('Listening to what you said…');
     try {
-      const res = await api.commandAudio(uri);
-      if (res.destination) {
-        await choose({ node_id: res.destination.node_id, label: res.destination.label }, res.reply);
-      } else {
-        const q = res.destination_query || res.transcript;
+      const res = await api.transcribeAudio(uri);
+      const q = res.destination_query || res.transcript;
+      if (q) {
         setQuery(q);
         await search(q, true);
+      } else {
+        say('I did not catch that. Please try again, or type the place.');
       }
     } catch (e) {
       say(errorToSpeech(e));

@@ -20,6 +20,10 @@ export default function Settings() {
   const [testing, setTesting] = useState(false);
 
   useEffect(() => {
+    speak('Settings. Voice and speech, navigation, emergency contact, server connection, and safety.');
+  }, []);
+
+  useEffect(() => {
     getServerUrl().then(setServer).catch(() => undefined);
   }, []);
 

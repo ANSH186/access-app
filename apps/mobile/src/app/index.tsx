@@ -98,7 +98,14 @@ export default function Home() {
     setTyped('');
     setBusy(true);
     try {
-      routeCommand(await api.commandText(t));
+      const res = await api.transcribeText(t);
+      routeCommand({
+        transcript: res.transcript || t,
+        intent: (res.intent as CommandResult['intent']) ?? 'unknown',
+        destination_query: res.destination_query ?? (res.intent === 'navigate' ? t : null),
+        destination: null,
+        reply: '',
+      });
     } catch (e) {
       say(errorToSpeech(e));
     } finally {

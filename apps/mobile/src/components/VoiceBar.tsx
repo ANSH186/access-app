@@ -255,8 +255,21 @@ export function VoiceBar() {
       setBusy(true);
       busyRef.current = true;
       try {
-        const res = await api.commandText(raw);
-        handleCommandResult(res);
+        const res = await api.transcribeText(raw);
+        if (res.intent === 'navigate' && (res.destination_query || res.transcript)) {
+          const q = res.destination_query || res.transcript;
+          router.push({ pathname: '/navigate', params: { q, intro: `Looking for ${q}.` } });
+        } else if (res.intent !== 'unknown') {
+          handleCommandResult({
+            transcript: res.transcript || raw,
+            intent: res.intent as CommandResult['intent'],
+            destination_query: res.destination_query,
+            destination: null,
+            reply: '',
+          });
+        } else {
+          say('I did not understand that. Say help to hear what you can say, or press a button by number.');
+        }
       } catch (e) {
         say(`${errorToSpeech(e)} You can also press a button by number. Say: read the screen.`);
       } finally {

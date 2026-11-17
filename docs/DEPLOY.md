@@ -97,7 +97,8 @@ This creates these accounts (password `Demo@12345` for all):
    | `SUPABASE_JWT_SECRET` | legacy JWT secret, or leave empty |
    | `DATABASE_URL` | session pooler string |
    | `GEMINI_API_KEY` | from step 3 |
-   | `GEMINI_MODEL` | `gemini-flash-latest` |
+   | `GEMINI_MODEL` | `gemini-flash-lite-latest` (the full flash models were returning 503 in Nov 2026) |
+   | `OCR_SPACE_API_KEY` | optional independent sign reader; leave empty or use `helloworld` for testing |
    | `CORS_ORIGINS` | your Vercel URL from step 5 (come back and fill it in) |
 
    **Do not** set `DEV_AUTH` on Render.
@@ -156,8 +157,9 @@ Stick them at about 1.2 m height. The positions come from one photo, so walk the
 | Symptom | Fix |
 |---|---|
 | App says "You need to sign in again" on every API call | Render `SUPABASE_URL` is wrong, or your project uses the legacy secret: set `SUPABASE_JWT_SECRET`. |
-| Route planning says map unavailable | `DATABASE_URL` is wrong. It must be the **session pooler** string with your password. |
+| Route planning says map unavailable | `DATABASE_URL` is wrong. The API now falls back to Supabase REST automatically; check `SUPABASE_URL` and the phone being signed in. |
 | Dashboard shows "Reconnecting…" forever | Realtime: re-run `0004_realtime_storage.sql`, then check Database → Publications → `supabase_realtime` lists `emergency_alerts`. |
-| "AI service is busy" | Gemini free quota hit. Wait a minute. Check the limits in AI Studio. |
+| "AI service is busy" | Gemini free quota or model capacity hit. The API automatically falls back to `gemini-flash-lite-latest`/`gemini-3.1-flash-lite`; check `/v1/diagnostics/ai` while signed in. Sign reading also has an OCR.space fallback. |
 | Report photo upload fails | Re-run `0004_realtime_storage.sql` (it creates the `report-photos` bucket). |
 | First request takes a minute | Render waking up. This is expected on the free tier. |
+| NIE North Campus routes missing in admin | Run `supabase/seed_north_campus.sql` (optional: the phone and API already bundle the schematic). |

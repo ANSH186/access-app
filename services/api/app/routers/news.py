@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 
 from ..ai.gemini import GeminiClient
-from ..auth import AuthUser
+from ..auth import AuthUser, current_user
 from ..deps import ai_user, get_gemini
 from ..news import ask_about_story, get_briefing, get_news
 
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/v1/news")
 async def news_list(
     limit: int = Query(14, ge=1, le=30),
     category: str | None = None,
-    user: AuthUser = Depends(ai_user),
+    user: AuthUser = Depends(current_user),
 ) -> dict:
     items = await get_news(limit=limit, category=category)
     return {

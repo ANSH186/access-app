@@ -27,6 +27,15 @@ export async function ensureLocationPermission(): Promise<{ granted: boolean; ca
   return { granted: asked.granted, canAskAgain: asked.canAskAgain };
 }
 
+export async function hasLocationPermission(): Promise<boolean> {
+  try {
+    const current = await Location.getForegroundPermissionsAsync();
+    return !!current.granted;
+  } catch {
+    return false;
+  }
+}
+
 export async function getMyLocation(): Promise<MyCoords | null> {
   const services = await Location.hasServicesEnabledAsync().catch(() => false);
   if (!services) return null;
