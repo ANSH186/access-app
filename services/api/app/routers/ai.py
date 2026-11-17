@@ -166,7 +166,10 @@ async def ocr_read(
     gemini_error: AppError | None = None
     try:
         out = await fast.generate_json(
-            [text_part(prompt), inline_part(data, mime)], prompts.OCR_SCHEMA, prompts.OCR_SYSTEM
+            [text_part(prompt), inline_part(data, mime)],
+            prompts.OCR_SCHEMA,
+            prompts.OCR_SYSTEM,
+            max_output_tokens=1400,
         )
     except AppError as exc:
         log.warning("gemini ocr failed: %s", exc.code)
@@ -260,7 +263,10 @@ async def vision_describe(
         location_text += "\nIf the photo does not match this location, describe what you actually see."
     prompt = prompts.VISION_PROMPT + location_text + (f"\nThe user asks: {q}" if q else "")
     out = await gemini.generate_json(
-        [text_part(prompt), inline_part(data, mime)], prompts.VISION_SCHEMA, prompts.VISION_SYSTEM
+        [text_part(prompt), inline_part(data, mime)],
+        prompts.VISION_SCHEMA,
+        prompts.VISION_SYSTEM,
+        max_output_tokens=450,
     )
     description = _clean(out.get("description"))
     confidence = _conf(out.get("confidence"))
@@ -306,7 +312,9 @@ async def assistant_transcribe(
             intent, query = local
             return {"transcript": typed, "intent": intent, "destination_query": query}
 
-    out = await gemini.generate_json(parts, prompts.COMMAND_SCHEMA, prompts.COMMAND_SYSTEM)
+    out = await gemini.generate_json(
+            parts, prompts.COMMAND_SCHEMA, prompts.COMMAND_SYSTEM, max_output_tokens=300
+        )
     transcript = _clean(out.get("transcript")) or ("" if has_audio else typed)
     intent = out.get("intent") if out.get("intent") in prompts.INTENTS else "unknown"
     if SOS_RE.search(transcript):
@@ -350,7 +358,9 @@ async def assistant_command(
     elif local_sos:
         out = {"transcript": typed, "intent": "sos", "destination_query": None}
     else:
-        out = await gemini.generate_json(parts, prompts.COMMAND_SCHEMA, prompts.COMMAND_SYSTEM)
+        out = await gemini.generate_json(
+            parts, prompts.COMMAND_SCHEMA, prompts.COMMAND_SYSTEM, max_output_tokens=300
+        )
 
     transcript = _clean(out.get("transcript")) or ("" if has_audio else typed)
     intent = out.get("intent") if out.get("intent") in prompts.INTENTS else "unknown"
