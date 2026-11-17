@@ -1,10 +1,10 @@
 # AccessAble AI — TechExpo Complete Deployment & Operations Manual
 
-Repository: [singhhanshh16/ASSISTIVE-APP](https://github.com/singhhanshh16/ASSISTIVE-APP)
+Repository: [ANSH186/access-app](https://github.com/ANSH186/access-app)
 
 ## 1. Automated Setup Summary
 
-- **GitHub Repository**: Initialized, tracked on `main`, and pushed to [https://github.com/singhhanshh16/ASSISTIVE-APP.git](https://github.com/singhhanshh16/ASSISTIVE-APP.git).
+- **GitHub Repository**: Initialized, tracked on `main`, and pushed to [https://github.com/ANSH186/access-app.git](https://github.com/ANSH186/access-app.git).
 - **Supabase Cloud**: Active on Mumbai region (`nlbobzgamrbhdesiqdhs.supabase.co`).
   - Database schema & storage buckets confirmed.
   - Campus map seed loaded: 107 nodes, 116 edges, 6 QR checkpoints.
@@ -26,8 +26,8 @@ Repository: [singhhanshh16/ASSISTIVE-APP](https://github.com/singhhanshh16/ASSIS
 ## 2. Deploy to Render (Backend API)
 
 1. Go to [dashboard.render.com](https://dashboard.render.com/) &rarr; **New +** &rarr; **Blueprint**.
-2. Connect your GitHub account and choose `singhhanshh16/ASSISTIVE-APP`.
-3. Render reads `services/api/render.yaml` and sets up `accessable-ai-api`.
+2. Connect your GitHub account and choose `ANSH186/access-app`.
+3. Render reads `render.yaml` at the root and sets up `accessable-ai-api`.
 4. Enter the required environment variables:
    - `ENV`: `production`
    - `SUPABASE_URL`: `https://nlbobzgamrbhdesiqdhs.supabase.co`
@@ -43,7 +43,7 @@ Repository: [singhhanshh16/ASSISTIVE-APP](https://github.com/singhhanshh16/ASSIS
 ## 3. Deploy to Vercel (Admin Web Dashboard)
 
 1. Go to [vercel.com](https://vercel.com/) &rarr; **Add New...** &rarr; **Project**.
-2. Import `singhhanshh16/ASSISTIVE-APP`.
+2. Import `ANSH186/access-app`.
 3. Set **Root Directory** to `apps/admin-web`.
 4. Add Environment Variables:
    - `VITE_SUPABASE_URL`: `https://nlbobzgamrbhdesiqdhs.supabase.co`
