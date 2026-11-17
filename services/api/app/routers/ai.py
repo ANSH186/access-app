@@ -570,7 +570,7 @@ async def vision_describe(
         [text_part(prompt), inline_part(data, mime)],
         prompts.VISION_LIVE_SCHEMA if live else prompts.VISION_SCHEMA,
         system,
-        700 if live else 450,
+        500,
         request.app.state.settings.gemini_vision_race_models,
     )
     description = _clean(out.get("description"))
