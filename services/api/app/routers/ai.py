@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 
@@ -143,6 +144,81 @@ def _conf(v) -> str:
     return v if v in CONF else "low"
 
 
+async def _ocr_with_fallback(
+    data: bytes,
+    mime: str,
+    prompt: str,
+    gemini: GeminiClient,
+    settings,
+    has_question: bool,
+) -> tuple[dict, AppError | None]:
+    """Prefer Gemini, but let OCR.space race it for plain transcription.
+
+    For plain sign reading, the first non-empty answer wins. For a follow-up
+    question, Gemini may answer from the text, so it gets the first chance; the
+    backup reader is used only if Gemini fails.
+    """
+    gem_task = asyncio.create_task(
+        gemini.generate_json(
+            [text_part(prompt), inline_part(data, mime)],
+            prompts.OCR_SCHEMA,
+            prompts.OCR_SYSTEM,
+            max_output_tokens=1400,
+        )
+    )
+    ocr_task = None if has_question else asyncio.create_task(
+        ocr_space_read_text(
+            data,
+            mime,
+            settings.ocr_space_api_key,
+            settings.ocr_space_timeout_s,
+        )
+    )
+
+    gem_error: AppError | None = None
+    if has_question or not settings.ocr_space_api_key:
+        try:
+            return await gem_task, None
+        except AppError as exc:
+            gem_error = exc
+        if settings.ocr_space_api_key:
+            text = await ocr_space_read_text(
+                data, mime, settings.ocr_space_api_key, settings.ocr_space_timeout_s
+            )
+            if text:
+                return {"text": text, "confidence": "medium", "spoken": text[:300]}, None
+        return {}, gem_error
+
+    pending: set[asyncio.Task] = {gem_task, ocr_task}  # type: ignore[arg-type]
+    while pending:
+        done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED, timeout=20)
+        if not done:
+            break
+        for task in done:
+            if task is gem_task:
+                try:
+                    out = task.result()
+                except AppError as exc:
+                    gem_error = exc
+                    out = {}
+                except Exception:  # noqa: BLE001
+                    gem_error = AppError(502, "ai_unavailable", "The AI service had a problem. Please try again.")
+                    out = {}
+                if out.get("text"):
+                    for p in pending:
+                        p.cancel()
+                    return out, None
+            else:
+                text = task.result()
+                if text:
+                    for p in pending:
+                        p.cancel()
+                    return {"text": text, "confidence": "medium", "spoken": text[:300]}, None
+    for p in pending:
+        p.cancel()
+    return {}, gem_error
+
+
 @router.post("/ocr/read")
 async def ocr_read(
     request: Request,
@@ -162,19 +238,9 @@ async def ocr_read(
         gemini.retry_delay_s,
         fallback_models=gemini.models[1:],
     )
-    out: dict = {}
-    gemini_error: AppError | None = None
-    try:
-        out = await fast.generate_json(
-            [text_part(prompt), inline_part(data, mime)],
-            prompts.OCR_SCHEMA,
-            prompts.OCR_SYSTEM,
-            max_output_tokens=1400,
-        )
-    except AppError as exc:
-        log.warning("gemini ocr failed: %s", exc.code)
-        gemini_error = exc
-        out = {}
+    out, gemini_error = await _ocr_with_fallback(
+        data, mime, prompt, fast, request.app.state.settings, bool(q)
+    )
 
     text = _clean(out.get("text"))
     confidence = _conf(out.get("confidence"))
@@ -182,23 +248,10 @@ async def ocr_read(
     answer = _clean(out.get("answer")) or None
     spoken = _clean(out.get("spoken"))
 
-    if not text:
-        # Independent fallback for dense or awkward images, and for Gemini busy
-        # periods. It does not answer questions, but it does read the text.
-        fallback = await ocr_space_read_text(
-            data, mime, request.app.state.settings.ocr_space_api_key, request.app.state.settings.ocr_space_timeout_s
-        )
-        if fallback:
-            text = fallback
-            confidence = "medium"
-            advice = advice or "I used the backup text reader. Check important details such as room numbers."
-            spoken = text if len(text) <= 300 else text[:300]
-            answer = None
-            log.info("ocr fallback", extra={"user": user.id, "chars": len(text)})
-        elif gemini_error is not None:
-            # No backup reader available: keep the original, specific error
-            # instead of pretending the image was merely unreadable.
-            raise gemini_error
+    if not text and gemini_error is not None:
+        # No backup reader available: keep the original, specific error
+        # instead of pretending the image was merely unreadable.
+        raise gemini_error
 
     if not text:
         confidence, answer = "low", None
