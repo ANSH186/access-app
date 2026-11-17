@@ -35,8 +35,9 @@ class Settings(BaseSettings):
     # own free OCR_SPACE_API_KEY for a real deployment.
     ocr_space_api_key: str = "helloworld"
     ocr_space_timeout_s: float = 15.0
-    # How many Gemini models to race for OCR. 1 disables the race (tests).
+    # How many Gemini models to race for OCR and vision. 1 disables the race (tests).
     gemini_ocr_race_models: int = 2
+    gemini_vision_race_models: int = 2
     cors_origins: str = ""
     env: str = "development"
     dev_auth: bool = False

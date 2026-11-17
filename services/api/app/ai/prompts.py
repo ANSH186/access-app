@@ -46,6 +46,31 @@ VISION_SCHEMA = {
     "required": ["description", "confidence"],
 }
 
+VISION_LIVE_SYSTEM = (
+    "You are a continuous scene describer for a blind person. In 3 to 6 short sentences, describe everything "
+    "you can see in this frame: people and what they are doing, walls, doors, windows, barriers, steps, vehicles, "
+    "trees, plants, furniture, signs, the ground or floor, and the sky. Use left, centre, right, near and far only "
+    "when they are clear. Do not claim that a path is safe, do not give exact distances, and do not invent things "
+    "outside the frame. If the image is dark or unclear, say so and use confidence low."
+)
+VISION_LIVE_PROMPT = "Describe everything visible in this frame for a blind person walking with the phone."
+VISION_LIVE_SCHEMA = VISION_SCHEMA
+
+DOCUMENT_OCR_SYSTEM = (
+    "You read a photographed page for a blind student. Copy every visible line in reading order, exactly as "
+    "printed, preserving line breaks. Include headings, numbers, punctuation and page numbers. Do not summarize, "
+    "translate, guess or add commentary. If a word is unreadable, omit it. If the page is blank or unreadable, "
+    "return an empty string and say so in advice."
+)
+DOCUMENT_OCR_PROMPT = (
+    "Read this page. Return every line of text in order, line by line. Do not skip lines and do not summarize."
+)
+TEXT_ANSWER_SYSTEM = (
+    "You answer a blind student's question using ONLY the supplied text. If the answer is not in the text, say "
+    "that you could not find it. Do not invent room numbers, names, dates or facts. Keep the answer to one or two "
+    "short sentences. Do not use markdown or links."
+)
+
 PLACE_SYSTEM = (
     "You help a blind person understand where they are. You are given a device location, a reverse-geocoded "
     "address, and possibly a campus landmark. Write 2 short, plain sentences: what kind of place this is, and "

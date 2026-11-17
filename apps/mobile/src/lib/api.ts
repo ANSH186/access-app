@@ -80,6 +80,8 @@ type Options = {
   onSlow?: () => void;
   timeoutMs?: number;
   retry?: boolean;
+  /** Default true. Set false for /health before sign-in. */
+  auth?: boolean;
 };
 
 async function getToken(forceRefresh = false): Promise<string> {
@@ -112,12 +114,13 @@ async function request<T>(path: string, opts: Options = {}): Promise<T> {
   let lastError: unknown = null;
 
   for (let attempt = 0; attempt < attempts; attempt++) {
-    let token = await getToken(attempt > 0);
+    const useAuth = opts.auth !== false;
+    const token = useAuth ? await getToken(attempt > 0) : '';
     const headers: Record<string, string> = {
-      Authorization: `Bearer ${token}`,
       Accept: 'application/json',
       'X-AccessAble-Client': 'mobile/2',
     };
+    if (useAuth) headers.Authorization = `Bearer ${token}`;
     let body: BodyInit | undefined;
     if (opts.form) body = opts.form;
     else if (opts.json !== undefined) {
@@ -132,7 +135,7 @@ async function request<T>(path: string, opts: Options = {}): Promise<T> {
     const slowTimer = setTimeout(() => {
       slowFired = true;
       bumpSlow(1);
-      speak(warm ? 'This is taking a little longer.' : WAKING_MESSAGE);
+      if (!url.endsWith('/health')) speak(warm ? 'This is taking a little longer.' : WAKING_MESSAGE);
       opts.onSlow?.();
     }, SLOW_NOTICE_MS);
 
@@ -229,7 +232,8 @@ export const api = {
     request<{ status: string; version: string; time: string }>('/health', {
       onSlow,
       retry: true,
-      timeoutMs: 20_000,
+      timeoutMs: 15_000,
+      auth: false,
     }),
 
   diagnostics: () => request<Diagnostics>('/v1/diagnostics', { retry: true }),
@@ -249,7 +253,7 @@ export const api = {
     const form = new FormData();
     appendFile(form, 'image', imageUri, 'sign.jpg');
     if (question) form.append('question', question);
-    return request<OcrResult>('/v1/ocr/read', { method: 'POST', form, onSlow });
+    return request<OcrResult>('/v1/ocr/read', { method: 'POST', form, onSlow, timeoutMs: 35_000 });
   },
 
   describeScene: (
@@ -258,6 +262,7 @@ export const api = {
     coords?: Coords | null,
     place?: string | null,
     onSlow?: () => void,
+    mode: 'single' | 'live' = 'single',
   ) => {
     const form = new FormData();
     appendFile(form, 'image', imageUri, 'scene.jpg');
@@ -267,13 +272,34 @@ export const api = {
       form.append('lng', String(coords.longitude));
     }
     if (place) form.append('place', place);
-    return request<VisionResult>('/v1/vision/describe', { method: 'POST', form, onSlow });
+    if (mode === 'live') form.append('mode', 'live');
+    return request<VisionResult>('/v1/vision/describe', { method: 'POST', form, onSlow, timeoutMs: 35_000 });
+  },
+
+  readDocument: (imageUri: string, onSlow?: () => void) => {
+    const form = new FormData();
+    appendFile(form, 'image', imageUri, 'page.jpg');
+    return request<{ text: string; lines: number; pages: number; confidence: string }>(
+      '/v1/ocr/read_document',
+      { method: 'POST', form, onSlow, timeoutMs: 75_000 },
+    );
+  },
+
+  answerText: (text: string, question: string) => {
+    const form = new FormData();
+    form.append('text', text);
+    form.append('question', question);
+    return request<{ answer: string }>('/v1/ocr/answer', {
+      method: 'POST',
+      form,
+      timeoutMs: 35_000,
+    });
   },
 
   commandText: (text: string, onSlow?: () => void) => {
     const form = new FormData();
     form.append('text', text);
-    return request<CommandResult>('/v1/assistant/command', { method: 'POST', form, onSlow });
+    return request<CommandResult>('/v1/assistant/command', { method: 'POST', form, onSlow, timeoutMs: 40_000 });
   },
 
   transcribeText: (text: string, onSlow?: () => void) => {
@@ -281,7 +307,7 @@ export const api = {
     form.append('text', text);
     return request<{ transcript: string; intent: string; destination_query: string | null }>(
       '/v1/assistant/transcribe',
-      { method: 'POST', form, onSlow },
+      { method: 'POST', form, onSlow, timeoutMs: 40_000 },
     );
   },
 
@@ -290,37 +316,37 @@ export const api = {
     appendFile(form, 'audio', audioUri, 'command.m4a');
     return request<{ transcript: string; intent: string; destination_query: string | null }>(
       '/v1/assistant/transcribe',
-      { method: 'POST', form, onSlow },
+      { method: 'POST', form, onSlow, timeoutMs: 40_000 },
     );
   },
 
   commandAudio: (audioUri: string, onSlow?: () => void) => {
     const form = new FormData();
     appendFile(form, 'audio', audioUri, 'command.m4a');
-    return request<CommandResult>('/v1/assistant/command', { method: 'POST', form, onSlow });
+    return request<CommandResult>('/v1/assistant/command', { method: 'POST', form, onSlow, timeoutMs: 40_000 });
   },
 
   news: (limit = 12) =>
     request<{ items: NewsItem[]; count: number; categories: string[] }>(
       `/v1/news?limit=${limit}`,
-      { retry: true, timeoutMs: 30_000 },
+      { retry: true, timeoutMs: 25_000 },
     ),
 
   newsBriefing: (limit = 8) =>
-    request<NewsBriefing>(`/v1/news/briefing?limit=${limit}`, { retry: true, timeoutMs: 75_000 }),
+    request<NewsBriefing>(`/v1/news/briefing?limit=${limit}`, { retry: true, timeoutMs: 40_000 }),
 
   askNews: (title: string, summary: string, question: string) =>
     request<{ answer: string }>('/v1/news/ask', {
       method: 'POST',
       json: { title, summary, question },
       retry: false,
-      timeoutMs: 75_000,
+      timeoutMs: 40_000,
     }),
 
   locationContext: (coords: Coords) =>
     request<PlaceInfo>(
       `/v1/location/context?lat=${coords.latitude}&lng=${coords.longitude}`,
-      { retry: true, timeoutMs: 75_000 },
+      { retry: true, timeoutMs: 30_000 },
     ),
 
   nearest: (coords: Coords) =>
@@ -348,7 +374,7 @@ export const api = {
       method: 'POST',
       json: { question },
       retry: false,
-      timeoutMs: 60_000,
+      timeoutMs: 35_000,
     }),
 };
 

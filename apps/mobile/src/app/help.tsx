@@ -7,8 +7,11 @@ const COMMANDS = [
   'Take me to the library',
   'Where am I',
   'Read this sign',
+  'Read a document or book',
   'Describe the scene',
+  'Continuous scene',
   'News',
+  'Hands-free voice',
   'Report a problem',
   'Next',
   'Previous',
@@ -43,7 +46,9 @@ export default function HelpScreen() {
           )
         }
       />
-      <BigButton label="Turn hands-free voice on or off" onPress={() => router.push('/settings')} />
+      <BigButton label="Turn hands-free voice on or off" onPress={() => router.push('/hands-free')} />
+      <BigButton label="Read a document or book" onPress={() => router.push('/document')} />
+      <BigButton label="Continuous scene description" onPress={() => router.push('/live-scene')} />
       <BigButton label="Back to home" variant="primary" onPress={() => router.replace('/')} />
     </Screen>
   );

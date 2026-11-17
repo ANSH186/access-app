@@ -31,6 +31,16 @@ SOS: phone → database function → realtime → dashboard   (never through the
   (reliable on the New Architecture). Scene descriptions are general-purpose,
   with location context supplied when available. A 45-second server AI timeout
   and a 50–75 second client timeout cover slow cold starts.
+- **Document and book reader.** Photograph one page at a time; every line is
+  read aloud, pages are kept on the phone, and you can move between pages, read
+  all pages, or ask questions about a page or the whole document.
+- **Continuous scene description.** The camera stays on and describes people,
+  walls, doors, barriers, steps, vehicles, trees, furniture, signs, the ground
+  and the sky every few seconds. It pauses while speaking so each description
+  can be heard.
+- **Hands-free voice.** In an installed build, the app listens again after it
+  finishes speaking. The in-app **Hands-free voice** screen explains the steps
+  and has the on/off control. Expo Go falls back to the Talk button.
 - **News updates.** India + world + science RSS feeds from The Hindu, BBC, NDTV,
   Al Jazeera and Indian Express, mixed so one feed cannot crowd out the others.
   An AI briefing summarises the top stories without inventing facts. The phone

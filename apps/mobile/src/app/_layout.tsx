@@ -53,6 +53,9 @@ function Gate() {
           <Stack.Screen name="index" options={title('AccessAble')} />
           <Stack.Screen name="navigate" options={title('Navigate')} />
           <Stack.Screen name="camera" options={title('Camera')} />
+          <Stack.Screen name="document" options={title('Document reader')} />
+          <Stack.Screen name="live-scene" options={title('Continuous scene')} />
+          <Stack.Screen name="hands-free" options={title('Hands-free voice')} />
           <Stack.Screen name="scan" options={title('Scan checkpoint')} />
           <Stack.Screen name="where-am-i" options={title('Where am I')} />
           <Stack.Screen name="news" options={title('News')} />

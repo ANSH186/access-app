@@ -23,8 +23,8 @@ import { BigButton } from './ui';
 const HIDDEN = ['/auth', '/sos', '/sos-status'];
 
 const HELP =
-  'You can say: help. Take me to the library. Where am I. Read this sign. Describe the scene. News. Report a problem. ' +
-  'Next. Previous. Repeat. Stop. Or press a button by number, for example, press two.';
+  'You can say: help. Take me to the library. Where am I. Read this sign. Read a document or book. Describe the scene. ' +
+  'Continuous scene. News. Report a problem. Hands-free voice. Next. Previous. Repeat. Stop. Or press a button by number, for example, press two.';
 
 const EMERGENCY =
   /\b(sos|emergency|i need help|help me|i am hurt|i'm hurt|i have fallen|i fell|i am in danger|i'm in danger|call 112|ambulance)\b/i;
@@ -39,6 +39,9 @@ const HOME = /\b(home|main menu|go home|start screen)\b/i;
 const WHERE = /\b(where am i|where am i now|my location|what is around me|what's around me)\b/i;
 const NEWS = /\b(news|headlines|brief me|latest news|what is happening|what's happening|current affairs)\b/i;
 const READ_SIGN = /\b(read (this |the )?sign|read a sign|read text|read this|what does this say)\b/i;
+const DOCUMENT = /\b(document|book|notebook|page reader|read a book|read document|read a page)\b/i;
+const LIVE = /\b(continuous scene|live scene|continuous description|keep describing|describe continuously|what is around me now)\b/i;
+const HANDS_FREE = /\b(hands free|hands-free|voice free|voice-free|autonomous voice|hands free mode)\b/i;
 const DESCRIBE = /\b(describe (the )?scene|describe what is in front of me|what is in front of me|what's in front of me|what do you see|describe this)\b/i;
 const REPORT = /\b(report a problem|report an issue|report a blocked|report a broken|report problem)\b/i;
 const MY_REPORTS = /\b(my reports|my report|report status|status of my reports)\b/i;
@@ -177,6 +180,18 @@ export function VoiceBar() {
         router.push({ pathname: '/camera', params: { mode: 'sign' } });
         return;
       }
+      if (DOCUMENT.test(lower)) {
+        router.push('/document');
+        return;
+      }
+      if (LIVE.test(lower)) {
+        router.push('/live-scene');
+        return;
+      }
+      if (HANDS_FREE.test(lower)) {
+        router.push('/hands-free');
+        return;
+      }
       if (DESCRIBE.test(lower)) {
         router.push({ pathname: '/camera', params: { mode: 'scene' } });
         return;
@@ -203,11 +218,17 @@ export function VoiceBar() {
           say('Hands-free voice is off.');
           return;
         }
-        if (/navigation|route/i.test(lower)) nav.stop();
-        else {
-          stopSpeaking();
-          setStatus('Stopped.');
+        if (/navigation|route/i.test(lower)) {
+          nav.stop();
+          return;
         }
+        const stopAction = pressByVoice('stop');
+        if (stopAction) {
+          stopAction.run();
+          return;
+        }
+        stopSpeaking();
+        setStatus('Stopped.');
         return;
       }
       if (SOS_OPEN.test(lower)) {

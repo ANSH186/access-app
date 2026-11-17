@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import logging
 import re
 
 from fastapi import APIRouter, Depends, Form, Request, UploadFile
 from fastapi import File as FormFile
+from PIL import Image
 
 from ..ai import prompts
 from ..ai.gemini import GeminiClient, inline_part, text_part
@@ -274,6 +276,190 @@ async def _ocr_with_fallback(
     return {}, gem_error
 
 
+def _local_answer(text: str, question: str) -> str:
+    """Tiny offline answerer used when the AI is unavailable."""
+    q = re.sub(r"[^a-z0-9 ]+", " ", question.lower()).split()
+    q = [w for w in q if len(w) > 2 and w not in {"the", "what", "where", "when", "who", "how", "why", "does", "this", "that", "from", "with", "about"}]
+    if not text.strip():
+        return "There is no text to search."
+    lines = [ln.strip() for ln in re.split(r"[\n\r]+", text) if ln.strip()]
+    if not lines:
+        return "There is no text to search."
+    scored = []
+    for line in lines:
+        low = line.lower()
+        score = sum(1 for w in q if w in low)
+        if score:
+            scored.append((score, line))
+    scored.sort(key=lambda x: (-x[0], len(x[1])))
+    if not scored:
+        return "I could not find that in the text."
+    best = [ln for _, ln in scored[:2]]
+    return "I found this in the text: " + " ".join(best)
+
+
+async def answer_from_text(gemini: GeminiClient, text: str, question: str) -> str:
+    q = _clean(question)
+    if not q:
+        return "Please ask a question about the text."
+    body_text = text[:12000]
+    try:
+        answer = await gemini.generate_text(
+            [{"text": f"Text:\n{body_text}\n\nQuestion: {q}"}],
+            prompts.TEXT_ANSWER_SYSTEM,
+            temperature=0.1,
+            max_output_tokens=300,
+        )
+        if answer.strip():
+            return answer.strip()
+    except Exception:  # noqa: BLE001
+        pass
+    return _local_answer(text, q)
+
+
+async def _document_half_text(data: bytes, fast: GeminiClient, settings) -> str:
+    """Read one image half with Gemini plain text, then OCR.space as backup."""
+    try:
+        text = await fast.generate_text(
+            [text_part(prompts.DOCUMENT_OCR_PROMPT), inline_part(data, "image/jpeg")],
+            prompts.DOCUMENT_OCR_SYSTEM,
+            max_output_tokens=900,
+        )
+        if text.strip() and "NO_TEXT" not in text:
+            return text.strip()
+    except Exception:  # noqa: BLE001
+        pass
+    fallback = await ocr_space_read_text(data, "image/jpeg", settings.ocr_space_api_key, settings.ocr_space_timeout_s)
+    return (fallback or "").strip()
+
+
+@router.post("/ocr/read_document")
+async def ocr_read_document(
+    request: Request,
+    image: UploadFile = FormFile(...),
+    user: AuthUser = Depends(ai_user),
+    gemini: GeminiClient = Depends(get_gemini),
+) -> dict:
+    """Read a full notebook or book page, including lines near the edges.
+
+    Tall pages are split into two overlapping halves and read in parallel. The
+    app can add one page at a time and keep the text for the whole book.
+    """
+    data, _ = await _image(image, request)
+    try:
+        img = Image.open(io.BytesIO(data)).convert("RGB")
+    except Exception:  # noqa: BLE001
+        raise AppError(400, "invalid_image", "That picture could not be opened. Please take it again.")
+    w, h = img.size
+    parts: list[bytes] = []
+    if h >= 900:
+        top = img.crop((0, 0, w, int(h * 0.58)))
+        bottom = img.crop((0, int(h * 0.42), w, h))
+        for part in (top, bottom):
+            buf = io.BytesIO()
+            part.save(buf, format="JPEG", quality=78)
+            parts.append(buf.getvalue())
+    else:
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=80)
+        parts.append(buf.getvalue())
+
+    fast = GeminiClient(
+        gemini.api_key,
+        gemini.models[0] if gemini.models else gemini.model,
+        gemini.base_url,
+        min(gemini.timeout_s, 18.0),
+        gemini.retry_delay_s,
+        fallback_models=gemini.models[1:],
+    )
+    texts = await asyncio.gather(
+        *(_document_half_text(part, fast, request.app.state.settings) for part in parts),
+        return_exceptions=True,
+    )
+    cleaned: list[str] = []
+    for t in texts:
+        if isinstance(t, str) and t.strip():
+            cleaned.append(t.strip())
+    if len(cleaned) == 2:
+        # Remove the duplicated lines at the overlap between the two halves.
+        top_lines = cleaned[0].splitlines()
+        bottom_lines = cleaned[1].splitlines()
+        max_k = min(12, len(top_lines), len(bottom_lines))
+        for k in range(max_k, 0, -1):
+            if [ln.strip() for ln in top_lines[-k:]] == [ln.strip() for ln in bottom_lines[:k]]:
+                bottom_lines = bottom_lines[k:]
+                break
+        cleaned = ["\n".join(top_lines), "\n".join(bottom_lines)]
+    text = "\n".join(x for x in cleaned if x.strip()).strip()
+    if not text:
+        raise AppError(502, "ai_unavailable", "I could not read this page. Hold the phone steady and try again.")
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    log.info("document_ocr", extra={"user": user.id, "lines": len(lines), "parts": len(parts)})
+    return {
+        "text": text,
+        "lines": len(lines),
+        "pages": len(parts),
+        "confidence": "medium",
+    }
+
+
+@router.post("/ocr/answer")
+async def ocr_answer(
+    text: str = Form(...),
+    question: str = Form(...),
+    user: AuthUser = Depends(ai_user),
+    gemini: GeminiClient = Depends(get_gemini),
+) -> dict:
+    answer = await answer_from_text(gemini, text, question)
+    return {"answer": answer}
+
+
+async def _race_gemini_json(
+    gemini: GeminiClient,
+    parts: list[dict],
+    schema: dict,
+    system: str,
+    max_output_tokens: int,
+    models_count: int = 2,
+) -> dict:
+    """Race the first flash-lite models and return the first usable JSON."""
+    models = [m for m in gemini.models[: max(1, models_count)] if m] or [gemini.model]
+    clients = [
+        GeminiClient(gemini.api_key, m, gemini.base_url, gemini.timeout_s, gemini.retry_delay_s)
+        for m in models
+    ]
+    tasks = {
+        asyncio.create_task(
+            c.generate_json(parts, schema, system, max_output_tokens=max_output_tokens)
+        ): c
+        for c in clients
+    }
+    last_error: AppError | None = None
+    pending = set(tasks)
+    while pending:
+        done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED, timeout=25)
+        if not done:
+            break
+        for task in done:
+            try:
+                out = task.result()
+            except AppError as exc:
+                last_error = exc
+                out = {}
+            except Exception:  # noqa: BLE001
+                last_error = AppError(502, "ai_unavailable", "The AI service had a problem. Please try again.")
+                out = {}
+            if out:
+                for p in pending:
+                    p.cancel()
+                return out
+    for p in pending:
+        p.cancel()
+    if last_error is not None:
+        raise last_error
+    return {}
+
+
 @router.post("/ocr/read")
 async def ocr_read(
     request: Request,
@@ -308,6 +494,11 @@ async def ocr_read(
         # instead of pretending the image was merely unreadable.
         raise gemini_error
 
+    if text and q and not answer:
+        # The structured OCR path can return text without an answer (for
+        # example when OCR.space won the race). Answer from the text we have.
+        answer = await answer_from_text(fast, text, q)
+
     if not text:
         confidence, answer = "low", None
         advice = advice or OCR_DEFAULT_ADVICE
@@ -336,12 +527,14 @@ async def vision_describe(
     lat: float | None = Form(None),
     lng: float | None = Form(None),
     place: str | None = Form(None),
+    mode: str | None = Form(None),
     user: AuthUser = Depends(ai_user),
     gemini: GeminiClient = Depends(get_gemini),
     m: MapData | None = Depends(get_map_data_optional),
 ) -> dict:
     data, mime = await _image(image, request)
     q = _clean(question)
+    live = (mode or "").strip().lower() == "live"
     location_lines: list[str] = []
     supplied_place = _clean(place)
     if supplied_place:
@@ -369,12 +562,16 @@ async def vision_describe(
             + "\n- ".join(location_lines)
         )
         location_text += "\nIf the photo does not match this location, describe what you actually see."
-    prompt = prompts.VISION_PROMPT + location_text + (f"\nThe user asks: {q}" if q else "")
-    out = await gemini.generate_json(
+    base_prompt = prompts.VISION_LIVE_PROMPT if live else prompts.VISION_PROMPT
+    system = prompts.VISION_LIVE_SYSTEM if live else prompts.VISION_SYSTEM
+    prompt = base_prompt + location_text + (f"\nThe user asks: {q}" if q else "")
+    out = await _race_gemini_json(
+        gemini,
         [text_part(prompt), inline_part(data, mime)],
-        prompts.VISION_SCHEMA,
-        prompts.VISION_SYSTEM,
-        max_output_tokens=450,
+        prompts.VISION_LIVE_SCHEMA if live else prompts.VISION_SCHEMA,
+        system,
+        700 if live else 450,
+        request.app.state.settings.gemini_vision_race_models,
     )
     description = _clean(out.get("description"))
     confidence = _conf(out.get("confidence"))
@@ -382,7 +579,7 @@ async def vision_describe(
     if not description:
         description = "I could not make out what is in front of the camera. Try again with better light."
         confidence, answer = "low", None
-    log.info("vision", extra={"user": user.id, "confidence": confidence, "located": bool(lat is not None)})
+    log.info("vision", extra={"user": user.id, "confidence": confidence, "located": bool(lat is not None), "live": live})
     return {"description": description, "answer": answer, "confidence": confidence, "caution": CAUTION}
 
 

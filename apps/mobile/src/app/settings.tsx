@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { BigButton, Body, Field, Heading, LiveText, Screen, ToggleRow, styles as ui } from '../components/ui';
@@ -119,6 +120,7 @@ export default function Settings() {
         }}
       />
       <BigButton label="Check microphone and speech recognition" onPress={checkVoice} />
+      <BigButton label="How to use hands-free voice" onPress={() => router.push('/hands-free')} />
       <BigButton label="Read this screen" onPress={() => speak(
         'Settings. Change speech speed, hands-free voice, emergency contact, server connection and safety information.',
       )} />

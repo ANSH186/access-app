@@ -77,6 +77,35 @@ export function stopSpeaking() {
   emit('end');
 }
 
+/** Queue several utterances and treat them as one speech event. */
+export function speakMany(texts: string[], opts: SpeakOptions = {}) {
+  const clean = texts.map((t) => (t ?? '').trim()).filter(Boolean);
+  if (!clean.length) return;
+  const seq = ++speakSeq;
+  Speech.stop();
+  emit('start');
+  lastSpoken = clean.join(' ');
+  clean.forEach((t, i) => {
+    Speech.speak(t, {
+      language: 'en-US',
+      rate,
+      onDone: () => {
+        if (seq !== speakSeq) return;
+        if (i === clean.length - 1) {
+          emit('end');
+          opts.onDone?.();
+        }
+      },
+      onStopped: () => {
+        if (seq === speakSeq && i === clean.length - 1) emit('end');
+      },
+      onError: () => {
+        if (seq === speakSeq && i === clean.length - 1) emit('end');
+      },
+    });
+  });
+}
+
 /** Text of the last navigation instruction, or the last thing spoken. */
 export function getLastInstruction(): string | null {
   return lastInstruction ?? lastSpoken;

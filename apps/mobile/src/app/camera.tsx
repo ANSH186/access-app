@@ -37,6 +37,7 @@ export default function CameraScreen() {
   const [place, setPlace] = useState<PlaceInfo | null>(null);
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState<string | null>(null);
+  const [error, setError] = useState('');
   const [torch, setTorch] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const coordsRef = useRef<Coords | null>(null);
@@ -71,17 +72,20 @@ export default function CameraScreen() {
   async function capture() {
     if (busy || !cam.current) return;
     setBusy(true);
+    setError('');
     if (countdownTimer.current) clearInterval(countdownTimer.current);
     setCountdown(null);
     haptic.tap();
     say(mode === 'sign' ? 'Reading the sign…' : 'Looking at the scene…');
     try {
-      const pic = await cam.current.takePictureAsync({ quality: 0.8 });
+      const pic = await cam.current.takePictureAsync({ quality: 0.8, shutterSound: false });
       const uri = await prepareImage(pic.uri, pic.width, pic.height);
       setImageUri(uri);
       await analyse(uri);
     } catch (e) {
-      say(`${errorToSpeech(e)} Please try taking the photo again.`);
+      const msg = `${errorToSpeech(e)} Please try taking the photo again.`;
+      setError(msg);
+      say(msg);
     } finally {
       setBusy(false);
     }
@@ -89,15 +93,24 @@ export default function CameraScreen() {
 
   async function analyse(uri: string, q?: string) {
     setAnswer(null);
+    setError('');
     if (mode === 'sign') {
       const r = await api.readSign(uri, q);
       setOcr(r);
       haptic.success();
       if (q) {
-        const a = r.answer || 'I could not find the answer in the text of the sign.';
-        setAnswer(a);
-        setStatus(a);
-        speak(a);
+        let a = r.answer;
+        if (!a && r.text.trim()) {
+          try {
+            a = (await api.answerText(r.text, q)).answer;
+          } catch {
+            a = null;
+          }
+        }
+        const spoken = a || 'I could not find the answer in the text of the sign.';
+        setAnswer(spoken);
+        setStatus(spoken);
+        speak(spoken);
       } else {
         const parts: string[] = [];
         if (r.text.trim()) parts.push(r.spoken || r.text);
@@ -142,7 +155,9 @@ export default function CameraScreen() {
     try {
       await analyse(imageUri, q.trim());
     } catch (e) {
-      say(errorToSpeech(e));
+      const msg = errorToSpeech(e);
+      setError(msg);
+      say(msg);
     } finally {
       setBusy(false);
     }
@@ -217,6 +232,7 @@ export default function CameraScreen() {
     setPlace(null);
     setAnswer(null);
     setQuestion('');
+    setError('');
     setCountdown(null);
     say('Ready. Point the camera and press Take photo, or press Take photo in 3 seconds.');
   }
@@ -287,6 +303,19 @@ export default function CameraScreen() {
         </>
       )}
       <LiveText>{status}</LiveText>
+      {!!error && !hasResult && (
+        <View style={ui.card}>
+          <Body>{error}</Body>
+          {imageUri && (
+            <BigButton
+              label="Try again with this photo"
+              variant="primary"
+              disabled={busy}
+              onPress={() => (question.trim() ? ask(question) : analyse(imageUri))}
+            />
+          )}
+        </View>
+      )}
 
       {ocr && (
         <View style={ui.card}>
@@ -295,6 +324,9 @@ export default function CameraScreen() {
             {ocr.text.trim() || 'No readable text found.'}
           </Text>
           {ocr.advice ? <Body>{ocr.advice}</Body> : null}
+          {!!ocr.text.trim() && (
+            <BigButton label="Read all the text" minHeight={72} onPress={() => speak(ocr.text)} />
+          )}
         </View>
       )}
       {scene && (
@@ -341,6 +373,8 @@ export default function CameraScreen() {
           <BigButton label="Take another photo" onPress={reset} />
         </>
       )}
+      <BigButton label="Read a document or book page" onPress={() => router.push('/document')} />
+      <BigButton label="Continuous scene description" onPress={() => router.push('/live-scene')} />
     </Screen>
   );
 }

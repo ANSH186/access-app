@@ -43,6 +43,13 @@ connection**, then checked with **Test server connection**.
   geocoding and an optional AI place description.
 - **News** with AI briefing, categories, story-by-story reading and “ask about
   this story”.
+- **Document and book reader.** Take one photo per page. Every line is read
+  aloud, pages are kept on the phone, and you can move between pages, read all
+  pages, delete pages, or ask questions about the current page or the whole
+  document.
+- **Continuous scene description.** The camera stays on and describes people,
+  walls, doors, barriers, steps, vehicles, trees, furniture, signs, the ground
+  and the sky every few seconds. It pauses while speaking.
 - **General scene description** with location context, plus “Tell me about this
   place”.
 - **Server health banner** and a real connection/AI/map diagnostic in Settings.
@@ -57,6 +64,27 @@ npx expo export --platform android
 
 Demo account: `student@accessable.demo` / `Demo@12345` (or press “Sign in as demo
 student”).
+
+## Hands-free voice — how to use it
+
+1. Install AccessAble as a development or production build. Continuous
+   on-device speech recognition does **not** run in Expo Go.
+2. Open **More options → Hands-free voice** (or Settings → How to use
+   hands-free voice).
+3. Turn **Hands-free voice mode** on.
+4. Wait until AccessAble finishes speaking, then say a command:
+   - “Take me to the library”
+   - “Where am I”
+   - “Read this sign”
+   - “Read a document or book”
+   - “Continuous scene”
+   - “Press two” (to activate the second button on the screen)
+   - “Help”
+5. Wait for the answer to finish, then speak your next command.
+6. Say **“Stop listening”** to turn hands-free off.
+
+In Expo Go, use the **Talk** button at the bottom; it records a clip and sends
+it to the server for transcription.
 
 ## TalkBack tips
 

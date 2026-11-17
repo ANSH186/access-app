@@ -1,0 +1,22 @@
+name: Keep API awake
+
+# Render's free web service sleeps after idle. A short scheduled ping keeps it
+# warm during the day, which removes most of the "waiting for the server"
+# delay in the phone app. GitHub may delay scheduled runs by a few minutes.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping health endpoint
+        run: |
+          curl -fsS --max-time 90 https://accessable-ai-api.onrender.com/health
+          echo

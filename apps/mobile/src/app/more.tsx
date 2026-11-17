@@ -14,6 +14,9 @@ export default function MoreScreen() {
       <Heading>More options</Heading>
       <BigButton label="Report a problem" hint="Report a blocked path, broken lift, wet floor or other issue" onPress={() => router.push('/report')} />
       <BigButton label="My reports" hint="Hear the status of problems you reported" onPress={() => router.push('/my-reports')} />
+      <BigButton label="Document and book reader" hint="Photograph pages and hear every line" onPress={() => router.push('/document')} />
+      <BigButton label="Continuous scene description" hint="Camera stays on and describes what is around you" onPress={() => router.push('/live-scene')} />
+      <BigButton label="Hands-free voice" hint="Use the app without pressing buttons" onPress={() => router.push('/hands-free')} />
       <BigButton label="Voice help" hint="Hear every voice command and button-number trick" onPress={() => router.push('/help')} />
       <BigButton label="Settings" hint="Speech speed, hands-free voice, emergency contact, server test" onPress={() => router.push('/settings')} />
       <BigButton label="About AccessAble and safety" onPress={() => router.push('/settings')} variant="ghost" />

@@ -172,6 +172,16 @@ export default function Home() {
         onPress={() => router.push({ pathname: '/camera', params: { mode: 'scene' } })}
       />
       <BigButton
+        label="Continuous scene"
+        hint="Camera stays on and describes people, walls, barriers, trees and objects around you"
+        onPress={() => router.push('/live-scene')}
+      />
+      <BigButton
+        label="Read document or book"
+        hint="Photograph one page at a time, hear every line, and ask questions"
+        onPress={() => router.push('/document')}
+      />
+      <BigButton
         label="News updates"
         hint="General news headlines with an AI briefing you can ask about"
         onPress={() => router.push('/news')}
