@@ -145,6 +145,7 @@ class GeminiClient:
         system_instruction: str | None = None,
         *,
         temperature: float = 0.2,
+        max_output_tokens: int = 700,
     ) -> str:
         """Generate free text (used by the news briefing). Returns '' on an empty answer."""
         if not self.api_key:
@@ -153,7 +154,7 @@ class GeminiClient:
             "contents": [{"role": "user", "parts": parts}],
             "generationConfig": {
                 "temperature": temperature,
-                "maxOutputTokens": 700,
+                "maxOutputTokens": max_output_tokens,
                 "thinkingConfig": {"thinkingBudget": 0},
             },
         }

@@ -23,6 +23,14 @@ router = APIRouter(prefix="/v1")
 CAUTION = "I can't judge distances or confirm the path is safe."
 OCR_DEFAULT_ADVICE = "I could not read any text. Hold the phone closer, keep it steady, and try again."
 OCR_LOW_ADVICE = "The text is hard to read. Hold the phone closer, keep it steady, and try again."
+OCR_PLAIN_PROMPT = (
+    "Read all the text in this photo exactly as printed, line by line. Do not translate, guess, "
+    "or add anything. If there is no readable text, reply with exactly NO_TEXT."
+)
+OCR_PLAIN_SYSTEM = (
+    "You are a careful sign and document reader for a blind person. Copy the visible text exactly, "
+    "preserve line breaks, and never invent words. Reply with the text only."
+)
 CONF = {"high", "medium", "low"}
 
 IMAGE_TYPES = {"image/jpeg": "image/jpeg", "image/jpg": "image/jpeg", "image/png": "image/png"}
@@ -206,6 +214,20 @@ async def _ocr_with_fallback(
             )
             if text:
                 return {"text": text, "confidence": "medium", "spoken": text[:300]}, None
+        # The JSON schema path can be rejected by a model as an invalid
+        # argument. A plain-text request is a much simpler body and often works.
+        if gem_error is not None and gem_error.code == "ai_unavailable":
+            for c in clients:
+                try:
+                    plain = await c.generate_text(
+                        [text_part(OCR_PLAIN_PROMPT), inline_part(data, mime)],
+                        OCR_PLAIN_SYSTEM,
+                        max_output_tokens=1400,
+                    )
+                except Exception:  # noqa: BLE001
+                    plain = ""
+                if plain and plain.strip() and "NO_TEXT" not in plain:
+                    return {"text": plain.strip(), "confidence": "medium", "spoken": plain.strip()[:300]}, None
         return {}, gem_error
 
     pending: set[asyncio.Task] = set(gem_tasks)
@@ -237,6 +259,18 @@ async def _ocr_with_fallback(
                 return out, None
     for p in pending:
         p.cancel()
+    if gem_error is not None and gem_error.code == "ai_unavailable":
+        for c in clients:
+            try:
+                plain = await c.generate_text(
+                    [text_part(OCR_PLAIN_PROMPT), inline_part(data, mime)],
+                    OCR_PLAIN_SYSTEM,
+                    max_output_tokens=1400,
+                )
+            except Exception:  # noqa: BLE001
+                plain = ""
+            if plain and plain.strip() and "NO_TEXT" not in plain:
+                return {"text": plain.strip(), "confidence": "medium", "spoken": plain.strip()[:300]}, None
     return {}, gem_error
 
 
