@@ -152,20 +152,34 @@ async def _ocr_with_fallback(
     settings,
     has_question: bool,
 ) -> tuple[dict, AppError | None]:
-    """Prefer Gemini, but let OCR.space race it for plain transcription.
+    """Prefer Gemini, but race two flash-lite models and OCR.space.
 
     For plain sign reading, the first non-empty answer wins. For a follow-up
-    question, Gemini may answer from the text, so it gets the first chance; the
-    backup reader is used only if Gemini fails.
+    question, Gemini may answer from the text, so the Gemini models get the
+    first chance; the backup reader is used only if they fail.
     """
-    gem_task = asyncio.create_task(
-        gemini.generate_json(
-            [text_part(prompt), inline_part(data, mime)],
-            prompts.OCR_SCHEMA,
-            prompts.OCR_SYSTEM,
-            max_output_tokens=1400,
+    models = [m for m in gemini.models[: max(1, settings.gemini_ocr_race_models)] if m] or [gemini.model]
+    clients = [
+        GeminiClient(
+            gemini.api_key,
+            m,
+            gemini.base_url,
+            gemini.timeout_s,
+            gemini.retry_delay_s,
         )
-    )
+        for m in models
+    ]
+    gem_tasks = [
+        asyncio.create_task(
+            c.generate_json(
+                [text_part(prompt), inline_part(data, mime)],
+                prompts.OCR_SCHEMA,
+                prompts.OCR_SYSTEM,
+                max_output_tokens=1400,
+            )
+        )
+        for c in clients
+    ]
     ocr_task = None if has_question else asyncio.create_task(
         ocr_space_read_text(
             data,
@@ -177,10 +191,15 @@ async def _ocr_with_fallback(
 
     gem_error: AppError | None = None
     if has_question or not settings.ocr_space_api_key:
-        try:
-            return await gem_task, None
-        except AppError as exc:
-            gem_error = exc
+        for task in gem_tasks:
+            try:
+                out = await task
+                if out.get("text"):
+                    return out, None
+            except AppError as exc:
+                gem_error = exc
+            except Exception:  # noqa: BLE001
+                gem_error = AppError(502, "ai_unavailable", "The AI service had a problem. Please try again.")
         if settings.ocr_space_api_key:
             text = await ocr_space_read_text(
                 data, mime, settings.ocr_space_api_key, settings.ocr_space_timeout_s
@@ -189,31 +208,33 @@ async def _ocr_with_fallback(
                 return {"text": text, "confidence": "medium", "spoken": text[:300]}, None
         return {}, gem_error
 
-    pending: set[asyncio.Task] = {gem_task, ocr_task}  # type: ignore[arg-type]
+    pending: set[asyncio.Task] = set(gem_tasks)
+    if ocr_task is not None:
+        pending.add(ocr_task)
     while pending:
         done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED, timeout=20)
         if not done:
             break
         for task in done:
-            if task is gem_task:
-                try:
-                    out = task.result()
-                except AppError as exc:
-                    gem_error = exc
-                    out = {}
-                except Exception:  # noqa: BLE001
-                    gem_error = AppError(502, "ai_unavailable", "The AI service had a problem. Please try again.")
-                    out = {}
-                if out.get("text"):
-                    for p in pending:
-                        p.cancel()
-                    return out, None
-            else:
+            if task is ocr_task:
                 text = task.result()
                 if text:
                     for p in pending:
                         p.cancel()
                     return {"text": text, "confidence": "medium", "spoken": text[:300]}, None
+                continue
+            try:
+                out = task.result()
+            except AppError as exc:
+                gem_error = exc
+                out = {}
+            except Exception:  # noqa: BLE001
+                gem_error = AppError(502, "ai_unavailable", "The AI service had a problem. Please try again.")
+                out = {}
+            if out.get("text"):
+                for p in pending:
+                    p.cancel()
+                return out, None
     for p in pending:
         p.cancel()
     return {}, gem_error

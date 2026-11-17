@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     database_url: str = ""
     gemini_api_key: str = ""
     gemini_model: str = "gemini-flash-lite-latest"
-    gemini_fallback_models: str = "gemini-3.1-flash-lite,gemini-3.8-flash,gemini-flash-latest"
+    gemini_fallback_models: str = "gemini-3.5-flash-lite,gemini-3.1-flash-lite,gemini-3.8-flash,gemini-flash-latest"
     gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
     gemini_timeout_s: float = 45.0
     gemini_retry_delay_s: float = 1.5
@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     # own free OCR_SPACE_API_KEY for a real deployment.
     ocr_space_api_key: str = "helloworld"
     ocr_space_timeout_s: float = 15.0
+    # How many Gemini models to race for OCR. 1 disables the race (tests).
+    gemini_ocr_race_models: int = 2
     cors_origins: str = ""
     env: str = "development"
     dev_auth: bool = False

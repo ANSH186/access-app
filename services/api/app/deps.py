@@ -120,6 +120,8 @@ def get_gemini(request: Request) -> GeminiClient:
     # Prefer it even when an older GEMINI_MODEL is still set in the deployment.
     if "gemini-flash-lite-latest" not in models:
         models.insert(0, "gemini-flash-lite-latest")
+    if "gemini-3.5-flash-lite" not in models:
+        models.append("gemini-3.5-flash-lite")
     if "gemini-3.1-flash-lite" not in models:
         models.append("gemini-3.1-flash-lite")
     return GeminiClient(

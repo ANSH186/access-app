@@ -39,7 +39,7 @@ def mini() -> MapData:
 def make_settings(**kw) -> Settings:
     base = dict(
         env="development", dev_auth=True, gemini_api_key="fake-key", gemini_retry_delay_s=0.0,
-        ocr_space_api_key="", map_source="file:/nonexistent", supabase_url="", supabase_jwt_secret="", _env_file=None,
+        gemini_ocr_race_models=1, ocr_space_api_key="", map_source="file:/nonexistent", supabase_url="", supabase_jwt_secret="", _env_file=None,
     )
     base.update(kw)
     return Settings(**base)
