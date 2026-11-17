@@ -110,12 +110,14 @@ async def ocr_read(
         fallback_models=gemini.models[1:],
     )
     out: dict = {}
+    gemini_error: AppError | None = None
     try:
         out = await fast.generate_json(
             [text_part(prompt), inline_part(data, mime)], prompts.OCR_SCHEMA, prompts.OCR_SYSTEM
         )
     except AppError as exc:
         log.warning("gemini ocr failed: %s", exc.code)
+        gemini_error = exc
         out = {}
 
     text = _clean(out.get("text"))
@@ -137,6 +139,10 @@ async def ocr_read(
             spoken = text if len(text) <= 300 else text[:300]
             answer = None
             log.info("ocr fallback", extra={"user": user.id, "chars": len(text)})
+        elif gemini_error is not None:
+            # No backup reader available: keep the original, specific error
+            # instead of pretending the image was merely unreadable.
+            raise gemini_error
 
     if not text:
         confidence, answer = "low", None
