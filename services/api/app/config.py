@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
     gemini_timeout_s: float = 45.0
     gemini_retry_delay_s: float = 1.5
+    # Independent OCR fallback. "helloworld" is the public testing key; set your
+    # own free OCR_SPACE_API_KEY for a real deployment.
+    ocr_space_api_key: str = "helloworld"
+    ocr_space_timeout_s: float = 15.0
     cors_origins: str = ""
     env: str = "development"
     dev_auth: bool = False

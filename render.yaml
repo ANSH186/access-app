@@ -18,6 +18,8 @@ services:
         value: "1"
       - key: CAMPUS_MAP_PATH
         value: app/data/nie_north_campus.json
+      - key: OCR_SPACE_API_KEY
+        sync: false
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_JWT_SECRET

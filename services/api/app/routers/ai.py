@@ -8,6 +8,7 @@ from fastapi import File as FormFile
 
 from ..ai import prompts
 from ..ai.gemini import GeminiClient, inline_part, text_part
+from ..ai.ocrspace import read_text as ocr_space_read_text
 from ..auth import AuthUser
 from ..deps import ai_user, get_gemini, get_map_data, get_map_data_optional
 from ..errors import AppError
@@ -100,14 +101,43 @@ async def ocr_read(
     data, mime = await _image(image, request)
     q = _clean(question)
     prompt = prompts.OCR_PROMPT + (f"\nThe user asks: {q}" if q else "")
-    out = await gemini.generate_json(
-        [text_part(prompt), inline_part(data, mime)], prompts.OCR_SCHEMA, prompts.OCR_SYSTEM
+    fast = GeminiClient(
+        gemini.api_key,
+        gemini.models[0] if gemini.models else gemini.model,
+        gemini.base_url,
+        min(gemini.timeout_s, 18.0),
+        gemini.retry_delay_s,
+        fallback_models=gemini.models[1:],
     )
+    out: dict = {}
+    try:
+        out = await fast.generate_json(
+            [text_part(prompt), inline_part(data, mime)], prompts.OCR_SCHEMA, prompts.OCR_SYSTEM
+        )
+    except AppError as exc:
+        log.warning("gemini ocr failed: %s", exc.code)
+        out = {}
+
     text = _clean(out.get("text"))
     confidence = _conf(out.get("confidence"))
     advice = _clean(out.get("advice")) or None
     answer = _clean(out.get("answer")) or None
     spoken = _clean(out.get("spoken"))
+
+    if not text:
+        # Independent fallback for dense or awkward images, and for Gemini busy
+        # periods. It does not answer questions, but it does read the text.
+        fallback = await ocr_space_read_text(
+            data, mime, request.app.state.settings.ocr_space_api_key, request.app.state.settings.ocr_space_timeout_s
+        )
+        if fallback:
+            text = fallback
+            confidence = "medium"
+            advice = advice or "I used the backup text reader. Check important details such as room numbers."
+            spoken = text if len(text) <= 300 else text[:300]
+            answer = None
+            log.info("ocr fallback", extra={"user": user.id, "chars": len(text)})
+
     if not text:
         confidence, answer = "low", None
         advice = advice or OCR_DEFAULT_ADVICE
