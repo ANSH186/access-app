@@ -414,52 +414,6 @@ async def ocr_answer(
     return {"answer": answer}
 
 
-async def _race_gemini_json(
-    gemini: GeminiClient,
-    parts: list[dict],
-    schema: dict,
-    system: str,
-    max_output_tokens: int,
-    models_count: int = 2,
-) -> dict:
-    """Race the first flash-lite models and return the first usable JSON."""
-    models = [m for m in gemini.models[: max(1, models_count)] if m] or [gemini.model]
-    clients = [
-        GeminiClient(gemini.api_key, m, gemini.base_url, gemini.timeout_s, gemini.retry_delay_s)
-        for m in models
-    ]
-    tasks = {
-        asyncio.create_task(
-            c.generate_json(parts, schema, system, max_output_tokens=max_output_tokens)
-        ): c
-        for c in clients
-    }
-    last_error: AppError | None = None
-    pending = set(tasks)
-    while pending:
-        done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED, timeout=25)
-        if not done:
-            break
-        for task in done:
-            try:
-                out = task.result()
-            except AppError as exc:
-                last_error = exc
-                out = {}
-            except Exception:  # noqa: BLE001
-                last_error = AppError(502, "ai_unavailable", "The AI service had a problem. Please try again.")
-                out = {}
-            if out:
-                for p in pending:
-                    p.cancel()
-                return out
-    for p in pending:
-        p.cancel()
-    if last_error is not None:
-        raise last_error
-    return {}
-
-
 @router.post("/ocr/read")
 async def ocr_read(
     request: Request,
