@@ -27,7 +27,7 @@ const HELP =
   'Next. Previous. Repeat. Stop. Or press a button by number, for example, press two.';
 
 const EMERGENCY =
-  /\b(sos|emergency|i need help|i am hurt|i'm hurt|i have fallen|i fell|i am in danger|i'm in danger|call 112|ambulance)\b/i;
+  /\b(sos|emergency|i need help|help me|i am hurt|i'm hurt|i have fallen|i fell|i am in danger|i'm in danger|call 112|ambulance)\b/i;
 
 const GLOBAL_HELP = /\b(help|what can i say|what can i do|voice commands|what can i press|read the screen|what is on the screen)\b/i;
 const REPEAT = /\b(repeat|say that again|say it again|again please)\b/i;

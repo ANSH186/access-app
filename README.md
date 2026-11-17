@@ -93,7 +93,7 @@ tunnel.
 
 | What | Command | Status |
 |---|---|---|
-| API (routing, directions, search, AI mocked, auth, news parser) | `cd services/api && pytest -q` | 69 pass, 2 skip |
+| API (routing, directions, search, AI mocked, auth, news, commands) | `cd services/api && pytest -q` | 72 pass, 2 skip |
 | Phone app type-check | `cd apps/mobile && npx tsc --noEmit` | pass |
 | Phone app Android bundle | `cd apps/mobile && npx expo export --platform android` | pass |
 | Dashboard build | `cd apps/admin-web && npm run build` | see below |

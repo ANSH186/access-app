@@ -7,7 +7,7 @@ Mysuru — the campus with CSE, CSE AI & ML and MCA).
 
 | File | Purpose |
 |---|---|
-| `services/api/app/data/nie_north_campus.json` | The graph the API serves. 22 destinations and 14 path junctions. |
+| `services/api/app/data/nie_north_campus.json` | The graph the API serves. 19 destinations and 14 path junctions (33 nodes, 36 edges). |
 | `apps/mobile/src/data/nieNorthCampus.json` | The same graph bundled in the phone app, so navigation works offline. |
 | `services/api/app/static/campus/nie_north_campus.png` | Dark schematic map for sighted helpers. |
 | `data/campus/nie_north_campus.json` | Source copy for documentation. |

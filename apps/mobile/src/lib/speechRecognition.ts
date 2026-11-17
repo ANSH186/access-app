@@ -6,6 +6,8 @@
  * Expo Go the app falls back to recording audio and asking the API to transcribe.
  * This keeps the app usable in both environments.
  */
+import { Platform } from 'react-native';
+
 type AnyModule = {
   ExpoSpeechRecognitionModule?: {
     start: (opts: Record<string, unknown>) => void;
@@ -84,7 +86,7 @@ export function startNativeListening(handlers: ListenHandlers): boolean {
       }),
     );
     m.start({
-      lang: 'en-IN',
+      lang: Platform.OS === 'android' ? 'en-IN' : 'en-US',
       interimResults: true,
       continuous: false,
       maxAlternatives: 1,
