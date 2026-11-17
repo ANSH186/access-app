@@ -35,8 +35,61 @@ AUDIO_TYPES = {
 AUDIO_EXT = {".m4a": "audio/mp4", ".mp4": "audio/mp4", ".aac": "audio/aac", ".wav": "audio/wav", ".webm": "audio/webm"}
 
 SOS_RE = re.compile(
-    r"\b(emergency|sos|ambulance|i am hurt|i'?m hurt|i have fallen|i fell|i am in danger|i'?m in danger)\b", re.I
+    r"\b(emergency|sos|ambulance|i need help|help me|i am hurt|i'?m hurt|i have fallen|i fell|i am in danger|i'?m in danger)\b", re.I
 )
+
+NAV_RE = re.compile(
+    r"\b(?:take me to|navigate to|go to|walk me to|directions to|find|where is|where'?s)\s+(.+)$", re.I
+)
+READ_RE = re.compile(r"\b(read (this |the )?sign|read a sign|read text|read this|what does this say)\b", re.I)
+DESCRIBE_RE = re.compile(
+    r"\b(describe (the )?scene|describe what is in front of me|what is in front of me|what'?s in front of me|what do you see|describe this)\b",
+    re.I,
+)
+WHERE_RE = re.compile(r"\b(where am i|where am i now|my location|what is around me|what'?s around me)\b", re.I)
+NEWS_RE = re.compile(r"\b(news|headlines|brief me|latest news|what is happening|what'?s happening|current affairs)\b", re.I)
+REPORT_RE = re.compile(r"\b(report a problem|report an issue|report a blocked|report a broken|report problem)\b", re.I)
+REPEAT_RE = re.compile(r"\b(repeat|say that again|say it again)\b", re.I)
+CANCEL_RE = re.compile(r"\b(cancel|stop|stop navigation|never mind)\b", re.I)
+HELP_RE = re.compile(r"\b(help|what can i say|what can i do|voice commands)\b", re.I)
+
+
+def classify_text(text: str, m: MapData | None = None) -> tuple[str, str | None] | None:
+    """Fast, deterministic command classifier.
+
+    Common commands never depend on the AI being healthy. Gemini is only the
+    fallback for unusual phrasing (and for audio transcription).
+    """
+    t = text.strip()
+    if not t:
+        return None
+    if SOS_RE.search(t):
+        return ("sos", None)
+    if READ_RE.search(t):
+        return ("read_sign", None)
+    if DESCRIBE_RE.search(t):
+        return ("describe_scene", None)
+    if WHERE_RE.search(t):
+        return ("where_am_i", None)
+    if NEWS_RE.search(t):
+        return ("news", None)
+    if REPORT_RE.search(t):
+        return ("report_problem", None)
+    if REPEAT_RE.search(t):
+        return ("repeat", None)
+    if CANCEL_RE.search(t):
+        return ("cancel", None)
+    if HELP_RE.search(t):
+        return ("help", None)
+    nav = NAV_RE.search(t)
+    if nav:
+        query = nav.group(1).strip().rstrip(".!?")
+        query = re.sub(r"^(?:the|a|an)\s+", "", query, flags=re.I).strip()
+        return ("navigate", query or None)
+    # A bare place name is navigation if it is on the map.
+    if m is not None and len(t.split()) <= 5 and best_match(m, t):
+        return ("navigate", t)
+    return None
 
 REPLIES = {
     "sos": "Opening emergency help. Confirm on the screen to send an alert.",
@@ -246,6 +299,13 @@ async def assistant_transcribe(
         parts = [text_part("Transcribe this short spoken question or command."), inline_part(data, mime)]
     else:
         parts = [text_part(f"Classify this command: {typed}")]
+
+    if not has_audio:
+        local = classify_text(typed)
+        if local is not None:
+            intent, query = local
+            return {"transcript": typed, "intent": intent, "destination_query": query}
+
     out = await gemini.generate_json(parts, prompts.COMMAND_SCHEMA, prompts.COMMAND_SYSTEM)
     transcript = _clean(out.get("transcript")) or ("" if has_audio else typed)
     intent = out.get("intent") if out.get("intent") in prompts.INTENTS else "unknown"
@@ -278,12 +338,17 @@ async def assistant_command(
         )
         parts = [text_part("Transcribe and classify this spoken command."), inline_part(data, mime)]
         local_sos = False
+        local_command = None
     else:
         parts = [text_part(f"Classify this command: {typed}")]
         local_sos = bool(SOS_RE.search(typed))  # safety net; never creates an alert
+        local_command = classify_text(typed, m)
 
-    if local_sos:
-        out: dict = {"transcript": typed, "intent": "sos", "destination_query": None}
+    if local_command is not None:
+        intent, query = local_command
+        out: dict = {"transcript": typed, "intent": intent, "destination_query": query}
+    elif local_sos:
+        out = {"transcript": typed, "intent": "sos", "destination_query": None}
     else:
         out = await gemini.generate_json(parts, prompts.COMMAND_SCHEMA, prompts.COMMAND_SYSTEM)
 

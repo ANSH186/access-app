@@ -132,7 +132,7 @@ async function request<T>(path: string, opts: Options = {}): Promise<T> {
     const slowTimer = setTimeout(() => {
       slowFired = true;
       bumpSlow(1);
-      speak(WAKING_MESSAGE);
+      speak(warm ? 'This is taking a little longer.' : WAKING_MESSAGE);
       opts.onSlow?.();
     }, SLOW_NOTICE_MS);
 
