@@ -51,13 +51,22 @@ async def diagnostics(
 
 @router.get("/v1/diagnostics/ai")
 async def diagnostics_ai(
+    models: str | None = None,
     user: AuthUser = Depends(current_user),
     gemini: GeminiClient = Depends(get_gemini),
 ) -> dict:
     """Redacted Gemini probe. Safe: no API key is returned."""
+    probe_client = gemini
+    if models:
+        wanted = [m.strip() for m in models.split(",") if m.strip()][:6]
+        probe_client = GeminiClient(
+            gemini.api_key,
+            wanted[0] if wanted else gemini.model,
+            fallback_models=wanted[1:],
+        )
     return {
-        "configured": bool(gemini.api_key),
-        "models": gemini.models,
+        "configured": bool(probe_client.api_key),
+        "models": probe_client.models,
         "available_models": await gemini.list_models(),
-        "probe": await gemini.probe(),
+        "probe": await probe_client.probe(),
     }
