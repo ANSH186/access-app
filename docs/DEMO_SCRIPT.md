@@ -16,7 +16,7 @@ Everything is in **TEST MODE**. No real emergency service is contacted.
 | # | Who | Do / say | What the audience sees |
 |---|---|---|---|
 | 1 | Student | Tap **Where am I**, then scan the *Ground floor — Near the lift* code. (If aiming is hard, use "I can't scan — choose my location" or the "Demo: I'm at the ground-floor lift checkpoint" button.) | Phone says "Checkpoint confirmed: Ground floor, near the lift." |
-| 2 | Student | Hold **Hold to talk**: "Take me to the library." | The phone finds the Department Library on Floor 2 and plans about 53 m. It reads step 1 aloud: "Face along the north corridor with the courtyard railing on your right…" |
+| 2 | Student | Press the **Talk** bar: "Take me to the library." (You can also say “press one” to use a numbered button.) | The phone finds the Department Library on Floor 2 and plans about 53 m. It reads step 1 aloud: "Face along the north corridor with the courtyard railing on your right…" |
 | 3 | Student | Tap **Next** through a couple of steps. Point out the courtyard railing as a touch guide, and the checkpoint prompt. | Big text plus speech for every step. |
 | 4 | Student | Tap **Read sign** and point at a printed room sign (bring one, e.g. "Lab 201"). | Phone reads the sign. Ask a follow-up ("Which room is this?") and it answers only from the sign's text. |
 | 5 | Reporter | **Report a problem**, then **Blocked path**, add a photo and "Chairs stacked across the corridor". The location is the last checkpoint (scan *Floor 2 — Outside the Department Library* first). | Report appears in the dashboard's **Reports** page, live. |
