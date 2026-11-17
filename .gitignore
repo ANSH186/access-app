@@ -1,6 +1,8 @@
 node_modules/
 .env
 .env.*
+api.txt
+*.key
 !.env.example
 __pycache__/
 *.pyc
