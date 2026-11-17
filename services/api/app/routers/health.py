@@ -2,9 +2,10 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Request
 
+from ..ai.gemini import GeminiClient
 from ..auth import AuthUser, current_user
 from ..config import API_VERSION
-from ..deps import get_map_data_optional
+from ..deps import get_gemini, get_map_data_optional
 
 router = APIRouter()
 
@@ -45,4 +46,17 @@ async def diagnostics(
         },
         "news": {"enabled": True},
         "user": user.id,
+    }
+
+
+@router.get("/v1/diagnostics/ai")
+async def diagnostics_ai(
+    user: AuthUser = Depends(current_user),
+    gemini: GeminiClient = Depends(get_gemini),
+) -> dict:
+    """Redacted Gemini probe. Safe: no API key is returned."""
+    return {
+        "configured": bool(gemini.api_key),
+        "models": gemini.models,
+        "probe": await gemini.probe(),
     }

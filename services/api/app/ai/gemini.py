@@ -164,6 +164,29 @@ class GeminiClient:
             return "".join(p.get("text", "") for p in parts_out if isinstance(p, dict)).strip()
         return ""
 
+    async def probe(self) -> list[dict[str, Any]]:
+        """Return redacted upstream status for each configured model (diagnostics only)."""
+        if not self.api_key:
+            return [{"model": m, "status": 0, "error": "no_api_key"} for m in self.models]
+        body = {
+            "contents": [{"role": "user", "parts": [{"text": "Reply with the single word OK."}]}],
+            "generationConfig": {"temperature": 0},
+        }
+        out: list[dict[str, Any]] = []
+        for model in self.models:
+            try:
+                async with httpx.AsyncClient(timeout=min(self.timeout_s, 20)) as client:
+                    resp = await client.post(
+                        self._url(model),
+                        json=body,
+                        headers={"x-goog-api-key": self.api_key, "content-type": "application/json"},
+                    )
+                preview = resp.text[:600].replace(self.api_key, "***") if resp.text else ""
+                out.append({"model": model, "status": resp.status_code, "body": preview})
+            except httpx.HTTPError as exc:
+                out.append({"model": model, "status": 0, "error": type(exc).__name__})
+        return out
+
 
 def _extract_json(resp: httpx.Response) -> dict[str, Any]:
     try:
