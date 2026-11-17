@@ -26,8 +26,8 @@ class Settings(BaseSettings):
     supabase_public_key: str = DEFAULT_SUPABASE_PUBLIC_KEY
     database_url: str = ""
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-flash-latest"
-    gemini_fallback_models: str = "gemini-2.0-flash,gemini-2.5-flash"
+    gemini_model: str = "gemini-3.8-flash"
+    gemini_fallback_models: str = "gemini-flash-latest,gemini-3.8-flash"
     gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
     gemini_timeout_s: float = 45.0
     gemini_retry_delay_s: float = 1.5

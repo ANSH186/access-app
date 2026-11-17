@@ -13,7 +13,7 @@ services:
       - key: ENV
         value: production
       - key: GEMINI_MODEL
-        value: gemini-flash-latest
+        value: gemini-3.8-flash
       - key: CAMPUS_MAP_ENABLED
         value: "1"
       - key: CAMPUS_MAP_PATH

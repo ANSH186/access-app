@@ -8,7 +8,7 @@ import respx
 
 from .conftest import DEV_HEADERS, block, load_mini, make_settings
 
-GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent"
 JPEG = b"\xff\xd8\xff\xe0" + b"0" * 64
 
 

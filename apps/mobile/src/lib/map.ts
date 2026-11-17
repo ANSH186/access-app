@@ -427,6 +427,11 @@ function turnOf(prev: [number, number], next: [number, number]): 'straight' | 'l
   if (Math.abs(ang) > 155) return 'around';
   return ang > 0 ? 'left' : 'right';
 }
+function compassOf(h: [number, number]): string {
+  const deg = ((Math.atan2(h[0], h[1]) * 180) / Math.PI + 360) % 360;
+  const dirs = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
+  return dirs[Math.round(deg / 45) % 8] ?? 'ahead';
+}
 function isRoom(kind: string): boolean {
   return ['room', 'lab', 'office', 'library', 'washroom', 'help_desk'].includes(kind);
 }
@@ -552,7 +557,7 @@ function buildSteps(map: CampusMap, nodeIds: string[], edgeIds: string[]): [Rout
       const length = edges.slice(i, j + 1).reduce((s, x) => s + x.length_m, 0);
       const t = headingVec ? turnOf(headingVec, h0) : 'straight';
       let text: string;
-      if (!headingVec) text = `Walk ${metres(length)} along the path.`;
+      if (!headingVec) text = `Head ${compassOf(h0)} along the path for ${metres(length)}.`;
       else if (t === 'straight') text = `Continue straight for ${metres(length)}.`;
       else if (t === 'around') text = `Turn around and walk ${metres(length)} along the path.`;
       else text = `Turn ${t} and walk ${metres(length)} along the path.`;
@@ -576,16 +581,16 @@ function buildSteps(map: CampusMap, nodeIds: string[], edgeIds: string[]): [Rout
         text = `${target} is straight ahead. Walk ${n} to the entrance.`;
         arrivalSide = 'straight';
       } else {
-        text = `Walk ${n} to ${np(b.label)}.`;
+        text = `Head ${compassOf(h)} for ${n} to ${np(b.label)}.`;
       }
       doorFinal = true;
     } else if (e.kind === 'outdoor' && isRoom(a.kind)) {
-      text = `Leave ${np(a.label)} and walk ${n} along the path.`;
+      text = `Leave ${np(a.label)} and head ${compassOf(h)} along the path for ${n}.`;
     } else if (e.kind === 'outdoor' && b.kind === 'corridor') {
       const target = 'the next path junction';
       if (turn === 'left' || turn === 'right') text = `Turn ${turn} and walk ${n} to ${target}.`;
       else if (turn === 'around') text = `Turn around and walk ${n} to ${target}.`;
-      else text = `Walk ${n} to ${target}.`;
+      else text = `Head ${compassOf(h)} for ${n} to ${target}.`;
     } else if (prevVertical) {
       const what = a.kind === 'lift' ? 'lift' : 'staircase';
       text = `Leave the ${what} and walk ${n} to the corridor.`;

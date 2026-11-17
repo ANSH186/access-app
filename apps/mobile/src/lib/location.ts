@@ -30,11 +30,12 @@ export async function ensureLocationPermission(): Promise<{ granted: boolean; ca
 export async function getMyLocation(): Promise<MyCoords | null> {
   const services = await Location.hasServicesEnabledAsync().catch(() => false);
   if (!services) return null;
-  const last = await Location.getLastKnownPositionAsync({ maxAge: 120_000 }).catch(() => null);
+  const last = await Location.getLastKnownPositionAsync({ maxAge: 60_000 }).catch(() => null);
+  const usableLast = last && (last.coords.accuracy == null || last.coords.accuracy <= 50) ? last : null;
   const pos =
-    last ??
+    usableLast ??
     (await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Balanced,
+      accuracy: Location.Accuracy.High,
       mayShowUserSettingsDialog: true,
     }).catch(() => null));
   if (!pos) return null;

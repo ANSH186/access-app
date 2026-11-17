@@ -35,7 +35,10 @@ class GeminiClient:
         fallback_models: list[str] | None = None,
     ):
         self.api_key = api_key
-        self.models = [m for m in [model, *(fallback_models or [])] if m]
+        self.models = []
+        for m in [model, *(fallback_models or [])]:
+            if m and m not in self.models:
+                self.models.append(m)
         self.model = self.models[0] if self.models else "gemini-flash-latest"
         self.base_url = base_url.rstrip("/")
         self.timeout_s = timeout_s
