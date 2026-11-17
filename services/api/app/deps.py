@@ -115,13 +115,13 @@ async def get_map_data_optional(request: Request) -> MapData | None:
 def get_gemini(request: Request) -> GeminiClient:
     s = request.app.state.settings
     models = [s.gemini_model, *s.gemini_fallbacks]
-    # Google retired the 2.x flash models and the "latest" alias can be busy.
-    # Prefer the current stable flash model when the deployment still has an
-    # older GEMINI_MODEL value from the environment.
-    if "gemini-3.8-flash" not in models and any(
-        m in ("gemini-flash-latest", "gemini-2.0-flash", "gemini-2.5-flash") for m in models
-    ):
-        models.insert(0, "gemini-3.8-flash")
+    # Google's full flash models were returning 503 "high demand" in Nov 2026;
+    # the lite flash model is the reliable multimodal option for this project.
+    # Prefer it even when an older GEMINI_MODEL is still set in the deployment.
+    if "gemini-flash-lite-latest" not in models:
+        models.insert(0, "gemini-flash-lite-latest")
+    if "gemini-3.1-flash-lite" not in models:
+        models.append("gemini-3.1-flash-lite")
     return GeminiClient(
         s.gemini_api_key,
         models[0],

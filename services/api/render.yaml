@@ -13,9 +13,9 @@ services:
       - key: ENV
         value: production
       - key: GEMINI_MODEL
-        value: gemini-3.8-flash
+        value: gemini-flash-lite-latest
       - key: GEMINI_FALLBACK_MODELS
-        value: gemini-flash-latest,gemini-3.8-flash
+        value: gemini-3.1-flash-lite,gemini-3.8-flash,gemini-flash-latest
       - key: GEMINI_TIMEOUT_S
         value: "45"
       - key: CAMPUS_MAP_ENABLED
