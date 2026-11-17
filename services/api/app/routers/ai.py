@@ -183,7 +183,7 @@ async def _ocr_with_fallback(
                 [text_part(prompt), inline_part(data, mime)],
                 prompts.OCR_SCHEMA,
                 prompts.OCR_SYSTEM,
-                max_output_tokens=1400,
+                max_output_tokens=900,
             )
         )
         for c in clients
@@ -222,7 +222,7 @@ async def _ocr_with_fallback(
                     plain = await c.generate_text(
                         [text_part(OCR_PLAIN_PROMPT), inline_part(data, mime)],
                         OCR_PLAIN_SYSTEM,
-                        max_output_tokens=1400,
+                        max_output_tokens=900,
                     )
                 except Exception:  # noqa: BLE001
                     plain = ""
@@ -265,7 +265,7 @@ async def _ocr_with_fallback(
                 plain = await c.generate_text(
                     [text_part(OCR_PLAIN_PROMPT), inline_part(data, mime)],
                     OCR_PLAIN_SYSTEM,
-                    max_output_tokens=1400,
+                    max_output_tokens=900,
                 )
             except Exception:  # noqa: BLE001
                 plain = ""
