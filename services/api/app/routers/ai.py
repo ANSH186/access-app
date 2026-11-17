@@ -565,13 +565,11 @@ async def vision_describe(
     base_prompt = prompts.VISION_LIVE_PROMPT if live else prompts.VISION_PROMPT
     system = prompts.VISION_LIVE_SYSTEM if live else prompts.VISION_SYSTEM
     prompt = base_prompt + location_text + (f"\nThe user asks: {q}" if q else "")
-    out = await _race_gemini_json(
-        gemini,
+    out = await gemini.generate_json(
         [text_part(prompt), inline_part(data, mime)],
         prompts.VISION_LIVE_SCHEMA if live else prompts.VISION_SCHEMA,
         system,
-        500,
-        request.app.state.settings.gemini_vision_race_models,
+        max_output_tokens=500,
     )
     description = _clean(out.get("description"))
     confidence = _conf(out.get("confidence"))
