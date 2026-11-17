@@ -99,6 +99,13 @@ export default function Settings() {
         hint="When on, the app listens for a command after it finishes speaking. Best with the installed app. Not available in Expo Go."
         value={handsFree}
         onChange={(v) => {
+          if (v && !nativeSpeechAvailable) {
+            setHandsFree(false);
+            speak(
+              'Hands-free voice needs the installed AccessAble app. In this preview, press the Talk button and speak, or type your command.',
+            );
+            return;
+          }
           setHandsFree(v);
           speak(
             v
