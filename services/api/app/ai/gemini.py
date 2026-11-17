@@ -62,17 +62,25 @@ class GeminiClient:
         schema: dict[str, Any] | None = None,
         system_instruction: str | None = None,
         temperature: float = 0.1,
+        max_output_tokens: int = 500,
     ) -> dict[str, Any]:
         """Call Gemini and return the parsed JSON object ({} if the model returned nothing)."""
         if not self.api_key:
             raise AppError(503, "ai_unavailable", "The AI feature is not set up on the server yet.")
-        body: dict[str, Any] = {
-            "contents": [{"role": "user", "parts": parts}],
-            "generationConfig": {"temperature": temperature},
+        generation: dict[str, Any] = {
+            "temperature": temperature,
+            "maxOutputTokens": max_output_tokens,
+            # Flash-lite models can otherwise spend many seconds "thinking" on a
+            # simple sign or scene. The tasks here are short and grounded.
+            "thinkingConfig": {"thinkingBudget": 0},
         }
         if schema is not None:
-            body["generationConfig"]["responseMimeType"] = "application/json"
-            body["generationConfig"]["responseSchema"] = schema
+            generation["responseMimeType"] = "application/json"
+            generation["responseSchema"] = schema
+        body: dict[str, Any] = {
+            "contents": [{"role": "user", "parts": parts}],
+            "generationConfig": generation,
+        }
         if system_instruction:
             body["systemInstruction"] = {"parts": [{"text": system_instruction}]}
 
@@ -121,9 +129,14 @@ class GeminiClient:
         system_instruction: str | None = None,
         *,
         temperature: float = 0.1,
+        max_output_tokens: int = 500,
     ) -> dict[str, Any]:
         return await self._generate(
-            parts, schema=schema, system_instruction=system_instruction, temperature=temperature
+            parts,
+            schema=schema,
+            system_instruction=system_instruction,
+            temperature=temperature,
+            max_output_tokens=max_output_tokens,
         )
 
     async def generate_text(
@@ -138,7 +151,11 @@ class GeminiClient:
             return ""
         body: dict[str, Any] = {
             "contents": [{"role": "user", "parts": parts}],
-            "generationConfig": {"temperature": temperature},
+            "generationConfig": {
+                "temperature": temperature,
+                "maxOutputTokens": 700,
+                "thinkingConfig": {"thinkingBudget": 0},
+            },
         }
         if system_instruction:
             body["systemInstruction"] = {"parts": [{"text": system_instruction}]}
