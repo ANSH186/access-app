@@ -52,6 +52,7 @@ async def diagnostics(
 @router.get("/v1/diagnostics/ai")
 async def diagnostics_ai(
     models: str | None = None,
+    mode: str | None = None,
     user: AuthUser = Depends(current_user),
     gemini: GeminiClient = Depends(get_gemini),
 ) -> dict:
@@ -64,9 +65,34 @@ async def diagnostics_ai(
             wanted[0] if wanted else gemini.model,
             fallback_models=wanted[1:],
         )
+    body = None
+    if mode == "ocr":
+        from pathlib import Path
+        import base64
+
+        from ..ai import prompts
+        from ..ai.gemini import inline_part, text_part
+
+        image = (Path(__file__).resolve().parents[1] / "static" / "campus" / "nie_north_campus.png").read_bytes()
+        body = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [text_part(prompts.OCR_PROMPT), inline_part(image, "image/png")],
+                }
+            ],
+            "generationConfig": {
+                "temperature": 0.1,
+                "maxOutputTokens": 1400,
+                "thinkingConfig": {"thinkingBudget": 0},
+                "responseMimeType": "application/json",
+                "responseSchema": prompts.OCR_SCHEMA,
+            },
+            "systemInstruction": {"parts": [{"text": prompts.OCR_SYSTEM}]},
+        }
     return {
         "configured": bool(probe_client.api_key),
         "models": probe_client.models,
         "available_models": await gemini.list_models(),
-        "probe": await probe_client.probe(),
+        "probe": await probe_client.probe(body),
     }
