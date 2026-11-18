@@ -8,6 +8,7 @@ import { haptic } from '../lib/haptics';
 import { getLastInstruction, speak, stopSpeaking, subscribeSpeech } from '../lib/speech';
 import {
   abortNativeListening,
+  isNativeListening,
   nativeSpeechAvailable,
   requestVoicePermission,
   startNativeListening,
@@ -59,6 +60,7 @@ export function VoiceBar() {
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
+  const startingRef = useRef(false);
   const listeningRef = useRef(false);
   const speechActive = useRef(false);
   const handsFreeRef = useRef(handsFree);
@@ -84,7 +86,15 @@ export function VoiceBar() {
   const scheduleRestart = useCallback((ms = 900) => {
     if (restartTimer.current) clearTimeout(restartTimer.current);
     restartTimer.current = setTimeout(() => {
-      if (handsFreeRef.current && !speechActive.current && !busyRef.current) {
+      restartTimer.current = null;
+      if (
+        handsFreeRef.current &&
+        !speechActive.current &&
+        !busyRef.current &&
+        !startingRef.current &&
+        !listeningRef.current &&
+        !isNativeListening()
+      ) {
         void startListeningRef.current?.(true);
       }
     }, ms);
@@ -332,7 +342,15 @@ export function VoiceBar() {
   voiceRef.current = voice;
 
   const startListening = useCallback(async (auto = false) => {
-    if (busyRef.current || speechActive.current || listeningRef.current) return;
+    if (
+      busyRef.current ||
+      speechActive.current ||
+      startingRef.current ||
+      listeningRef.current ||
+      isNativeListening()
+    ) {
+      return;
+    }
     if (!nativeSpeechAvailable) {
       if (auto) {
         if (!warnedNoNative.current) {
@@ -346,47 +364,65 @@ export function VoiceBar() {
       await voiceRef.current?.toggle();
       return;
     }
-    const allowed = await requestVoicePermission();
-    if (!allowed) {
-      say('Microphone and speech recognition permission are needed for voice control. You can type your command instead.');
-      if (auto) setHandsFree(false);
-      return;
-    }
-    setListeningState(true);
-    setStatus('Listening. Say a command.');
-    const started = startNativeListening({
-      onPartial: (partial) => setStatus(`I hear: “${partial}”`),
-      onFinal: (finalText) => {
+
+    startingRef.current = true;
+    try {
+      const allowed = await requestVoicePermission();
+      if (!allowed) {
+        say('Microphone and speech recognition permission are needed for voice control. You can type your command instead.');
+        if (auto) setHandsFree(false);
+        return;
+      }
+      // TTS or another start may have begun while we waited for permission.
+      if (busyRef.current || speechActive.current || listeningRef.current || isNativeListening()) {
+        return;
+      }
+
+      setListeningState(true);
+      setStatus('Listening. Say a command.');
+      const started = startNativeListening(
+        {
+          onPartial: (partial) => setStatus(`I hear: “${partial}”`),
+          onFinal: (finalText) => {
+            setListeningState(false);
+            void handleRef.current?.(finalText);
+            if (handsFreeRef.current) scheduleRestart(1400);
+          },
+          onEnd: () => {
+            setListeningState(false);
+            if (handsFreeRef.current) scheduleRestart(900);
+          },
+          onError: (code, message) => {
+            setListeningState(false);
+            if (code === 'aborted') {
+              // We aborted on purpose (screen change or TTS). Do not restart.
+              return;
+            }
+            if (code === 'not-allowed' || code === 'service-not-allowed') {
+              setHandsFree(false);
+              say('Speech recognition is not available. Check microphone and speech recognition permissions in phone settings.');
+              return;
+            }
+            if (code === 'network') {
+              setStatus('Speech recognition needs an internet connection. You can type your command.');
+              if (handsFreeRef.current) scheduleRestart(2000);
+              return;
+            }
+            if (code === 'no-speech' || code === 'speech-timeout') {
+              if (handsFreeRef.current) scheduleRestart(1200);
+              return;
+            }
+            setStatus(message ? `Voice error: ${message}` : 'I did not catch that. Please try again.');
+            if (handsFreeRef.current) scheduleRestart(1500);
+          },
+        },
+      );
+      if (!started) {
         setListeningState(false);
-        void handleRef.current?.(finalText);
-        if (handsFreeRef.current) scheduleRestart(1400);
-      },
-      onEnd: () => {
-        setListeningState(false);
-        if (handsFreeRef.current) scheduleRestart(800);
-      },
-      onError: (code, message) => {
-        setListeningState(false);
-        if (code === 'no-speech' || code === 'aborted' || code === 'speech-timeout') {
-          if (handsFreeRef.current) scheduleRestart(900);
-          return;
-        }
-        if (code === 'not-allowed' || code === 'service-not-allowed') {
-          setHandsFree(false);
-          say('Speech recognition is not available. Check microphone and speech recognition permissions in phone settings.');
-          return;
-        }
-        if (code === 'network') {
-          setStatus('Speech recognition needs an internet connection. You can type your command.');
-        } else {
-          setStatus(message ? `Voice error: ${message}` : 'I did not catch that. Please try again.');
-        }
-        if (handsFreeRef.current) scheduleRestart(1500);
-      },
-    });
-    if (!started) {
-      setListeningState(false);
-      say('Voice recognition could not start. You can type your command below.');
+        say('Voice recognition could not start. You can type your command below.');
+      }
+    } finally {
+      startingRef.current = false;
     }
   }, [say, scheduleRestart, setHandsFree, setListeningState]);
 
@@ -396,16 +432,18 @@ export function VoiceBar() {
     return subscribeSpeech((event) => {
       speechActive.current = event === 'start';
       if (event === 'start') {
+        if (restartTimer.current) clearTimeout(restartTimer.current);
         abortNativeListening();
         setListeningState(false);
       } else if (handsFreeRef.current && !busyRef.current) {
         scheduleRestart(700);
       }
     });
-  }, [scheduleRestart]);
+  }, [scheduleRestart, setListeningState]);
 
   useEffect(() => {
     if (!handsFree || !session || HIDDEN.includes(pathname)) {
+      if (restartTimer.current) clearTimeout(restartTimer.current);
       abortNativeListening();
       setListeningState(false);
       return;
@@ -414,14 +452,14 @@ export function VoiceBar() {
       return;
     }
     const t = setTimeout(() => {
-      void startListening(true);
+      void startListeningRef.current?.(true);
     }, 900);
     return () => {
       clearTimeout(t);
-      abortNativeListening();
       if (restartTimer.current) clearTimeout(restartTimer.current);
+      abortNativeListening();
     };
-  }, [handsFree, session, pathname, startListening]);
+  }, [handsFree, session, pathname, setListeningState]);
 
   useEffect(() => {
     return () => {
