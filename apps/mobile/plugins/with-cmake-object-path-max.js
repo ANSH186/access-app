@@ -1,6 +1,6 @@
 const { withAppBuildGradle } = require('@expo/config-plugins');
 
-const CMAKE_ARG = '-DCMAKE_OBJECT_PATH_MAX=250';
+const CMAKE_ARG = '-DCMAKE_OBJECT_PATH_MAX=259';
 
 function addObjectPathLimit(contents) {
   if (contents.includes('CMAKE_OBJECT_PATH_MAX')) {

@@ -157,7 +157,7 @@ For a real phone, use the id printed by `adb devices`.
 ### Windows native build notes
 
 - `plugins/with-cmake-object-path-max.js` adds
-  `-DCMAKE_OBJECT_PATH_MAX=250` to the generated `android/app/build.gradle`.
+  `-DCMAKE_OBJECT_PATH_MAX=259` to the generated `android/app/build.gradle`.
   Without it, Ninja fails on gesture-handler codegen paths longer than 260
   characters.
 - `react-native-reanimated` and `react-native-worklets` were removed. The app
@@ -165,6 +165,21 @@ For a real phone, use the id printed by `adb devices`.
   source trees are the deepest in `node_modules` and hit the same Windows path
   limit. If you later need Reanimated, use the EAS cloud build or enable
   Windows long paths.
+
+### Build an APK for a real phone (arm64)
+
+The emulator APK contains only x86_64 native libraries and cannot be installed
+on a phone — `adb` reports `INSTALL_FAILED_NO_MATCHING_ABIS`. Build an arm64 APK:
+
+```powershell
+cd C:\dev\accessable-ai\apps\mobile
+powershell -ExecutionPolicy Bypass -File .\scripts\build-phone-apk.ps1
+adb install -r .\android\app\build\outputs\apk\release\app-release.apk
+```
+
+The script reads `.env`, builds a standalone release APK with the JavaScript
+bundle and API settings baked in, and prints the APK path. It is signed with the
+debug keystore for testing; use EAS below for a store-ready signed build.
 
 ### Build an APK without Android Studio, NDK or USB
 
