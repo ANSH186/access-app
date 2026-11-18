@@ -70,6 +70,21 @@ student”).
 `npx expo run:android` needs an Android SDK, the matching NDK and Build-Tools,
 and either a USB-connected phone or a running emulator.
 
+This project must live at a **short path** because Windows still enforces a
+260-character path limit for some native modules (`react-native-worklets` fails
+with `mkdir ... No such file or directory` otherwise). On this machine it is at:
+
+```text
+C:\dev\accessable-ai
+```
+
+The Android SDK must be at a path **without spaces**, otherwise the C++ linker
+fails with `undefined symbol: std::__ndk1...`:
+
+```text
+C:\Android\Sdk
+```
+
 The project currently uses:
 
 ```text
@@ -92,23 +107,23 @@ Or, with `sdkmanager`:
 sdkmanager "build-tools;37.0.0" "ndk;27.1.12297006"
 ```
 
-On this machine the Android SDK is at:
+On this machine the Android SDK is installed at a path **without spaces**:
 
 ```text
-C:\Users\ANSH SINGH\AppData\Local\Android\Sdk
+C:\Android\Sdk
 ```
 
 Set these in a **new** PowerShell window (or permanently in Windows Environment
 Variables):
 
 ```powershell
-$sdk = "$env:LOCALAPPDATA\Android\Sdk"
+$sdk = "C:\Android\Sdk"
 $jdk = "C:\Program Files\Eclipse Adoptium\jdk-17.0.21.9-hotspot"
 $env:ANDROID_HOME = $sdk
 $env:ANDROID_SDK_ROOT = $sdk
 $env:JAVA_HOME = $jdk
 $env:JAVA_TOOL_OPTIONS = "-Djava.net.preferIPv4Stack=true"
-$env:Path = "$sdk\platform-tools;$sdk\emulator;$jdk\bin;$env:Path"
+$env:Path = "$sdk\platform-tools;$sdk\emulator;$sdk\cmdline-tools\latest\bin;$jdk\bin;$env:Path"
 ```
 
 Connect a phone with USB debugging enabled, or start the existing emulator:
@@ -128,18 +143,16 @@ adb devices
 Then build and install:
 
 ```powershell
+cd C:\dev\accessable-ai\apps\mobile
 npx expo run:android --device emulator-5554
 ```
 
 For a real phone, use the id printed by `adb devices`.
 
-> **Windows path warning:** the native C++ build can fail with undefined
-> `std::__ndk1` symbols when the project or Android SDK path contains a space,
-> such as `C:\Users\ANSH SINGH\...`. If that happens, either use the EAS build
-> below, or move both the project and the SDK to paths without spaces, for
-> example `C:\dev\accessable-ai` and `C:\Android\Sdk`, set
-> `ANDROID_HOME=C:\Android\Sdk`, then run `npx expo prebuild --clean` and
-> `npx expo run:android` again.
+> **Path rules:** keep the project at a short path (the current
+> `C:\dev\accessable-ai` works) and keep the Android SDK/NDK at a path without
+> spaces (`C:\Android\Sdk`). If either path changes, run
+> `npx expo prebuild --clean` before building again, or use the EAS build below.
 
 ### Build an APK without Android Studio, NDK or USB
 
