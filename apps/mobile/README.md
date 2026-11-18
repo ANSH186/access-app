@@ -67,8 +67,30 @@ student”).
 
 ## Run the installed Android app (needed for hands-free voice)
 
-`npx expo run:android` needs an Android SDK and either a USB-connected phone or a
-running emulator.
+`npx expo run:android` needs an Android SDK, the matching NDK and Build-Tools,
+and either a USB-connected phone or a running emulator.
+
+The project currently uses:
+
+```text
+compileSdk 37
+targetSdk  36
+buildTools 37.0.0
+NDK        27.1.12297006
+```
+
+Install the missing SDK parts in **Android Studio → SDK Manager → SDK Tools**
+(enable “Show Package Details”):
+
+- Android SDK Build-Tools **37.0.0**
+- NDK (Side by side) **27.1.12297006**
+- CMake if the SDK Manager offers it
+
+Or, with `sdkmanager`:
+
+```powershell
+sdkmanager "build-tools;37.0.0" "ndk;27.1.12297006"
+```
 
 On this machine the Android SDK is at:
 
@@ -85,6 +107,7 @@ $jdk = "C:\Program Files\Eclipse Adoptium\jdk-17.0.21.9-hotspot"
 $env:ANDROID_HOME = $sdk
 $env:ANDROID_SDK_ROOT = $sdk
 $env:JAVA_HOME = $jdk
+$env:JAVA_TOOL_OPTIONS = "-Djava.net.preferIPv4Stack=true"
 $env:Path = "$sdk\platform-tools;$sdk\emulator;$jdk\bin;$env:Path"
 ```
 
@@ -110,7 +133,17 @@ npx expo run:android --device emulator-5554
 
 For a real phone, use the id printed by `adb devices`.
 
-### Build an APK without Android Studio or USB
+> **Windows path warning:** the native C++ build can fail with undefined
+> `std::__ndk1` symbols when the project or Android SDK path contains a space,
+> such as `C:\Users\ANSH SINGH\...`. If that happens, either use the EAS build
+> below, or move both the project and the SDK to paths without spaces, for
+> example `C:\dev\accessable-ai` and `C:\Android\Sdk`, set
+> `ANDROID_HOME=C:\Android\Sdk`, then run `npx expo prebuild --clean` and
+> `npx expo run:android` again.
+
+### Build an APK without Android Studio, NDK or USB
+
+This is the quickest route for hands-free voice:
 
 ```powershell
 npx eas-cli@latest login
@@ -119,10 +152,18 @@ npx eas-cli@latest build --profile preview --platform android
 ```
 
 Download the APK from the link EAS prints, copy it to the phone and install it.
-`eas.json` already has a `preview` APK profile.
+`eas.json` already has a `preview` APK profile with the public Supabase/API
+values baked in. EAS does the Android build in the cloud, so no local NDK is
+needed.
 
 `npx expo-doctor` needs access to `exp.host`. If it times out, the project is
-still fine; retry on a stable network, or check VPN/proxy/firewall.
+still fine; retry on a stable network, or run:
+
+```powershell
+$env:NODE_OPTIONS="--dns-result-order=ipv4first"
+npx expo-doctor
+```
+
 `npx tsc --noEmit` and `npx expo export --platform android` are the offline
 checks.
 
