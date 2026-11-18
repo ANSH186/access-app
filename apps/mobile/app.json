@@ -66,6 +66,13 @@
         }
       ],
       "expo-asset"
-    ]
+    ],
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      }
+    }
   }
 }
