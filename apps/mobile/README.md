@@ -154,6 +154,18 @@ For a real phone, use the id printed by `adb devices`.
 > spaces (`C:\Android\Sdk`). If either path changes, run
 > `npx expo prebuild --clean` before building again, or use the EAS build below.
 
+### Windows native build notes
+
+- `plugins/with-cmake-object-path-max.js` adds
+  `-DCMAKE_OBJECT_PATH_MAX=250` to the generated `android/app/build.gradle`.
+  Without it, Ninja fails on gesture-handler codegen paths longer than 260
+  characters.
+- `react-native-reanimated` and `react-native-worklets` were removed. The app
+  never imports them and Expo Router treats them as optional peers. Their C++
+  source trees are the deepest in `node_modules` and hit the same Windows path
+  limit. If you later need Reanimated, use the EAS cloud build or enable
+  Windows long paths.
+
 ### Build an APK without Android Studio, NDK or USB
 
 This is the quickest route for hands-free voice:
