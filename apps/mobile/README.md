@@ -65,6 +65,67 @@ npx expo export --platform android
 Demo account: `student@accessable.demo` / `Demo@12345` (or press “Sign in as demo
 student”).
 
+## Run the installed Android app (needed for hands-free voice)
+
+`npx expo run:android` needs an Android SDK and either a USB-connected phone or a
+running emulator.
+
+On this machine the Android SDK is at:
+
+```text
+C:\Users\ANSH SINGH\AppData\Local\Android\Sdk
+```
+
+Set these in a **new** PowerShell window (or permanently in Windows Environment
+Variables):
+
+```powershell
+$sdk = "$env:LOCALAPPDATA\Android\Sdk"
+$jdk = "C:\Program Files\Eclipse Adoptium\jdk-17.0.21.9-hotspot"
+$env:ANDROID_HOME = $sdk
+$env:ANDROID_SDK_ROOT = $sdk
+$env:JAVA_HOME = $jdk
+$env:Path = "$sdk\platform-tools;$sdk\emulator;$jdk\bin;$env:Path"
+```
+
+Connect a phone with USB debugging enabled, or start the existing emulator:
+
+```powershell
+emulator -avd Medium_Phone_API_37.0
+```
+
+If `adb devices` says `offline`, reset it:
+
+```powershell
+adb kill-server
+adb start-server
+adb devices
+```
+
+Then build and install:
+
+```powershell
+npx expo run:android --device emulator-5554
+```
+
+For a real phone, use the id printed by `adb devices`.
+
+### Build an APK without Android Studio or USB
+
+```powershell
+npx eas-cli@latest login
+npx eas-cli@latest build:configure
+npx eas-cli@latest build --profile preview --platform android
+```
+
+Download the APK from the link EAS prints, copy it to the phone and install it.
+`eas.json` already has a `preview` APK profile.
+
+`npx expo-doctor` needs access to `exp.host`. If it times out, the project is
+still fine; retry on a stable network, or check VPN/proxy/firewall.
+`npx tsc --noEmit` and `npx expo export --platform android` are the offline
+checks.
+
 ## Hands-free voice — how to use it
 
 1. Install AccessAble as a development or production build. Continuous
