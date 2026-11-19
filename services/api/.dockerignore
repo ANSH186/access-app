@@ -1,0 +1,16 @@
+# Secrets and local environments
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# Python caches and test artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS artifacts
+.DS_Store

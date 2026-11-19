@@ -1,0 +1,208 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend-tests:
+    name: Backend API Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            services/api/requirements.txt
+            services/api/requirements-dev.txt
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r services/api/requirements.txt
+          pip install -r services/api/requirements-dev.txt
+
+      - name: Run Pytest test suite
+        working-directory: services/api
+        env:
+          ENV: test
+          DEV_AUTH: "1"
+          CAMPUS_MAP_ENABLED: "1"
+          CAMPUS_MAP_PATH: app/data/nie_north_campus.json
+        run: |
+          pytest -v
+
+  mobile-validation:
+    name: Mobile App Validation (Expo / React Native)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: apps/mobile/package-lock.json
+
+      - name: Install mobile dependencies
+        working-directory: apps/mobile
+        run: npm ci
+
+      - name: Validate TypeScript
+        working-directory: apps/mobile
+        run: npx tsc --noEmit
+
+      - name: Check Expo Android export
+        working-directory: apps/mobile
+        run: npx expo export --platform android
+
+  admin-web-validation:
+    name: Admin Dashboard Validation (Vite / React)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: apps/admin-web/package-lock.json
+
+      - name: Install dashboard dependencies
+        working-directory: apps/admin-web
+        run: npm ci
+
+      - name: Run dashboard production build
+        working-directory: apps/admin-web
+        run: npm run build
+
+  campus-map-validation:
+    name: Campus Map Integrity Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate sample campus map graph
+        run: python data/sample-campus/validate_map.py
+
+  docker-validation:
+    name: Docker Image Build & Healthcheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: "Build Docker image (context: root)"
+        run: |
+          docker build \
+            --tag accessable-api:ci-test \
+            --file services/api/Dockerfile \
+            .
+
+      - name: Verify container startup and health endpoint
+        run: |
+          # Start container in detached mode with test environment variables
+          docker run -d \
+            --name test-api-container \
+            -p 8000:8000 \
+            -e ENV=development \
+            -e DEV_AUTH=1 \
+            -e PORT=8000 \
+            accessable-api:ci-test
+
+          echo "Waiting for container to report healthy..."
+          for i in {1..20}; do
+            STATUS=$(docker inspect --format='{{json .State.Health.Status}}' test-api-container 2>/dev/null || echo '"unknown"')
+            echo "Attempt $i: Health status is $STATUS"
+            if [ "$STATUS" = '"healthy"' ]; then
+              echo "Container health check passed!"
+              break
+            fi
+            sleep 2
+          done
+
+          # Test HTTP endpoint
+          HTTP_RESPONSE=$(curl -fsS http://127.0.0.1:8000/health)
+          echo "Health endpoint response: $HTTP_RESPONSE"
+
+          # Verify non-root user
+          RUNNING_USER=$(docker exec test-api-container whoami)
+          echo "Container running as user: $RUNNING_USER"
+          if [ "$RUNNING_USER" != "appuser" ]; then
+            echo "ERROR: Container is not running as non-root user 'appuser'!"
+            exit 1
+          fi
+
+          # Stop and cleanup
+          docker stop test-api-container
+          docker rm test-api-container
+
+  database-validation:
+    name: Database Migrations & SQL Test Suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgrespassword
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Run Supabase migrations, RLS tests, and seed checks
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgrespassword
+        run: |
+          chmod +x supabase/tests/run_tests.sh
+          bash supabase/tests/run_tests.sh

@@ -1,0 +1,32 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    container_name: accessable-api
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8000}:8000"
+    env_file:
+      - path: services/api/.env
+        required: false
+      - path: .env
+        required: false
+    environment:
+      - PORT=8000
+      - ENV=${ENV:-development}
+      - DEV_AUTH=${DEV_AUTH:-1}
+      - CAMPUS_MAP_ENABLED=${CAMPUS_MAP_ENABLED:-1}
+      - CAMPUS_MAP_PATH=${CAMPUS_MAP_PATH:-app/data/nie_north_campus.json}
+      - MAP_SOURCE=${MAP_SOURCE:-db}
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+    volumes:
+      # Mount application code and data for local development inspection
+      - ./services/api/app:/app/app:ro
+      - ./data:/app/data:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:8000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s

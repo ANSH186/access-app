@@ -1,0 +1,88 @@
+name: Continuous Deployment
+
+on:
+  workflow_run:
+    workflows: ["Continuous Integration"]
+    branches: [main]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish-and-deploy:
+    name: Build, Publish Image & Trigger Render Deployment
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata and lowercase image name
+        id: meta
+        run: |
+          REPO_OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE_NAME="ghcr.io/${REPO_OWNER_LOWER}/accessable-api"
+          SHA_TAG="${{ github.sha }}"
+          echo "image_name=${IMAGE_NAME}" >> "$GITHUB_OUTPUT"
+          echo "sha_tag=${SHA_TAG}" >> "$GITHUB_OUTPUT"
+          echo "Tags to be pushed:"
+          echo "  - ${IMAGE_NAME}:${SHA_TAG}"
+          echo "  - ${IMAGE_NAME}:latest"
+
+      - name: Build and push production image to GHCR
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/api/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image_name }}:${{ steps.meta.outputs.sha_tag }}
+            ${{ steps.meta.outputs.image_name }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Deploy to Render
+        env:
+          RENDER_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          echo "=========================================================="
+          echo "Render Deployment Trigger Step"
+          echo "=========================================================="
+          if [ -z "$RENDER_HOOK" ]; then
+            echo "NOTICE: RENDER_DEPLOY_HOOK_URL secret is not configured in repository secrets."
+            echo "To enable automated zero-downtime deployment to Render:"
+            echo "  1. Navigate to your Render service dashboard (accessable-ai-api)"
+            echo "  2. Go to Settings -> Deploy Hook and copy the URL"
+            echo "  3. In GitHub repo, go to Settings -> Secrets and variables -> Actions"
+            echo "  4. Create a new repository secret named RENDER_DEPLOY_HOOK_URL"
+            echo "Skipping Render webhook trigger. Deployment was NOT executed."
+          else
+            echo "Triggering Render deployment webhook..."
+            # Trigger Render deploy hook without printing the secret URL in logs
+            HTTP_CODE=$(curl -s -o /tmp/render_resp.txt -w "%{http_code}" -X POST "$RENDER_HOOK")
+            echo "Render deploy hook returned HTTP status: $HTTP_CODE"
+            if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+              echo "SUCCESS: Render deployment triggered successfully!"
+              cat /tmp/render_resp.txt
+              echo ""
+            else
+              echo "ERROR: Failed to trigger Render deployment. HTTP response code: $HTTP_CODE"
+              cat /tmp/render_resp.txt
+              echo ""
+              exit 1
+            fi
+          fi
