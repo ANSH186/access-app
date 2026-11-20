@@ -65,7 +65,7 @@ jobs:
 
       - name: Install mobile dependencies
         working-directory: apps/mobile
-        run: npm ci
+        run: npm ci --legacy-peer-deps
 
       - name: Validate TypeScript
         working-directory: apps/mobile
